@@ -1,10 +1,9 @@
-﻿using System.Collections;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using Telegram.Bot;
 
-namespace PokerBot
+namespace PokerBotCore
 {
     class User
     {
@@ -12,10 +11,10 @@ namespace PokerBot
         [Key, DatabaseGenerated(DatabaseGeneratedOption.None)]
         public long Id { get; set; }
         public string FirstName;
+        //[ConcurrencyCheck]
         public int Money { get; set; }
         public int bet;
         public virtual User Referal { get; set; }
-        public List<User> requests = new List<User>();
         public int lastraise;
         public Combination combination;
         public uint count_messages = 0;

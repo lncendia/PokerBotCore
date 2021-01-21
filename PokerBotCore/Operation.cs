@@ -1,46 +1,33 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Drawing;
-using RestSharp;
+using System.IO;
+using System.Linq;
+using System.Threading.Tasks;
+using Microsoft.EntityFrameworkCore;
 using Newtonsoft.Json.Linq;
 using Qiwi.BillPayments.Client;
-using Qiwi.BillPayments.Model.In;
 using Qiwi.BillPayments.Model;
-using System.Threading.Tasks;
-using System.IO;
+using Qiwi.BillPayments.Model.In;
+using RestSharp;
 
-namespace PokerBot
+namespace PokerBotCore
 {
     static class Operation
     {
-        public static void AddUser(long id, User Referal)
-        {
-            Bot.users.Add(new User() { Id = id, Money = 0, Referal = Referal });
-        }
-        public static async void SaveDB()
-        {
-            while (true)
-            {
-                await Task.Delay(30000);
-                GC.Collect();
-                if (Bot.db.ChangeTracker.HasChanges())
-                {
-                    Bot.db.SaveChanges();
-                    Console.WriteLine("База данных сохранена.");
-                }
-            }
-        }
+
         public static DateTime time;
         public static async void Mute()
         {
+            using DB db = new DB();
+            DbSet<User> users = db.Users;
             try
             {
                 while (true)
                 {
                     time = DateTime.Now.AddMinutes(3);
                     await Task.Delay(180000);
-                    foreach (User user in Bot.users)
+                    foreach (User user in users)
                     {
                         user.count_messages = 0;
                     }
@@ -83,11 +70,13 @@ namespace PokerBot
         {
             try
             {
+                using DB db = new DB();
                 var response = client.GetBillInfo(bill_id);
                 if (response.Status.ValueEnum == BillStatusEnum.Paid)
                 {
                     user.AddMoney((int)response.Amount.ValueDecimal);
                     if (user.Referal != null) user.Referal.AddMoney((int)(response.Amount.ValueDecimal * (decimal)0.07));
+                    db.SaveChanges();
                     return true;
                 }
                 return false;
@@ -98,6 +87,7 @@ namespace PokerBot
         {
             try
             {
+                using DB db = new DB();
                 int Money = (int)(user.output * 0.85);
                 var client = new RestClient("https://edge.qiwi.com/sinap/api/v2/terms/99/payments");
                 var request = new RestRequest(Method.POST);
@@ -111,7 +101,8 @@ namespace PokerBot
                 dynamic jobject = JObject.Parse(response.Content);
                 if (jobject.transaction.state.code.ToString() == "Accepted")
                 {
-                    Bot.db.Transactions.Add(new Transaction() { User = user, Money = user.output, Number = number, Date = DateTime.Now.ToString("dd.MMM.yyyy") });
+                    db.Transactions.Add(new Transaction { User = user, Money = user.output, Number = number, Date = DateTime.Now.ToString("dd.MMM.yyyy") });
+                    db.SaveChanges();
                     user.Money -= user.output;
                     return true;
                 }
@@ -130,11 +121,6 @@ namespace PokerBot
                 user.state = User.State.main;
                 user.Money += user.bet;
             }
-            return;
-        }
-        public static User GetUser(long id)
-        {
-            return Bot.users.Find(id);
         }
         public static Room GetRoom(int id)
         {
@@ -152,9 +138,9 @@ namespace PokerBot
             List<string> cards = new List<string>();
             foreach (string str in nominal)
             {
-                foreach (string str_deck in deck)
+                foreach (string strDeck in deck)
                 {
-                    cards.Add($"{str} {str_deck}");
+                    cards.Add($"{str} {strDeck}");
                 }
             }
             return cards;
@@ -275,11 +261,11 @@ namespace PokerBot
                 if (same == 3) sets.Add(nominal[i]);
             }
             if (sets.Count == 0) return false;
-            sbyte max_set = sets.Max();
+            sbyte maxSet = sets.Max();
             List<sbyte> nominals = new List<sbyte>();
             for (int i = 0; i < nominal.Count - 1; i++)
             {
-                if (nominal[i] == max_set) continue;
+                if (nominal[i] == maxSet) continue;
                 int same = 1;
                 for (int j = i + 1; j < nominal.Count; j++)
                 {
@@ -288,7 +274,7 @@ namespace PokerBot
                 if (same == 2) nominals.Add(nominal[i]);
             }
             if (nominals.Count == 0) return false;
-            user.combination = new Combination(max_set, Combination.Comb.fullhouse, nominals.Max());
+            user.combination = new Combination(maxSet, Combination.Comb.fullhouse, nominals.Max());
             name = "Фулл хаус";
             return true;
         }
@@ -414,8 +400,8 @@ namespace PokerBot
                     nominal = nominal1.ToString();
                     break;
             }
-            string suit_str = card.Substring(card.Length - 1), suit = "";
-            switch (suit_str)
+            string suitStr = card.Substring(card.Length - 1), suit = "";
+            switch (suitStr)
             {
                 case "♣":
                     suit = "clubs";
@@ -435,9 +421,7 @@ namespace PokerBot
         public static Image GetImage(List<string> cards, User user)
         {
             Image table;
-            if (File.Exists($"tables\\{user.Id}.jpg")) table = Image.FromFile($"tables\\{user.Id}.jpg");
-            else
-                table = Image.FromFile("tables\\table.jpg");
+            table = Image.FromFile(File.Exists($"tables\\{user.Id}.jpg") ? $"tables\\{user.Id}.jpg" : "tables\\table.jpg");
             Graphics g = Graphics.FromImage(table);
             List<Image> images = new List<Image>();
             foreach (string str in cards)
@@ -554,7 +538,7 @@ namespace PokerBot
             if (winners[0].combination.combination == Combination.Comb.pair || winners[0].combination.combination == Combination.Comb.twopair || winners[0].combination.combination == Combination.Comb.set || winners[0].combination.combination == Combination.Comb.kare || winners[0].combination.combination == Combination.Comb.nullcomb)
             {
                 string name = "";
-                var cards_nothand = new List<sbyte>();
+                var cardsNothand = new List<sbyte>();
                 foreach (User user in winners)
                 {
                     var openedCards = user.room.openedCards.ToList();
@@ -570,26 +554,19 @@ namespace PokerBot
                     switch (combination)
                     {
                         case Combination.Comb.set:
-                            CheckSet(nominal, user, ref name, ref cards_nothand);
+                            CheckSet(nominal, user, ref name, ref cardsNothand);
                             break;
                         case Combination.Comb.kare:
-                            CheckKare(nominal, user, ref name, ref cards_nothand);
+                            CheckKare(nominal, user, ref name, ref cardsNothand);
                             break;
                         case Combination.Comb.nullcomb:
                             break;
                         default:
-                            CheckPair(nominal, user, ref name, ref cards_nothand);
+                            CheckPair(nominal, user, ref name, ref cardsNothand);
                             break;
                     }
-                    foreach (var x in cards_nothand)
-                    {
-                        Console.WriteLine(x);
-                    }
-                    foreach (var x in openedCards)
-                    {
-                        if (cards_nothand.Contains(GetNominal(x))) continue;
-                        cards.Add(GetNominal(x));
-                    }
+
+                    cards.AddRange(from x in openedCards where !cardsNothand.Contains(GetNominal(x)) select GetNominal(x));
                 }
                 cards = cards.Distinct().ToList();
                 List<sbyte> kickers = new List<sbyte>();
@@ -634,8 +611,13 @@ namespace PokerBot
                              GetNominal(user.cards[0]),
                              GetNominal(user.cards[1])
                         };
-                        if (cardsUser.Contains(kick)) users.Add(user);
+                        if (cardsUser.Contains(kick))
+                        {
+                            users.Add(user);
+                        }
                     }
+                    if (users.Count > 0) break;
+
                 }
                 if (users.Count != 0) return users;
             }

@@ -3,12 +3,11 @@ using System.Collections.Generic;
 using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
-using System.Text;
 using System.Threading.Tasks;
 using Telegram.Bot.Types.InputFiles;
 using Telegram.Bot.Types.ReplyMarkups;
 
-namespace PokerBot
+namespace PokerBotCore
 {
     class FakeRoom : Room
     {
@@ -16,7 +15,7 @@ namespace PokerBot
         static readonly List<Combination.Comb> combinations = new List<Combination.Comb>() { Combination.Comb.flush, Combination.Comb.kare, Combination.Comb.set, Combination.Comb.twopair };
         public FakeRoom(User user, string FirstName, int count) : base(user, FirstName, count, false)
         {
-            var x = new FakeCombination(combinations[rnd.Next(0, combinations.Count)], count);
+            var x = new FakeCombination(combinations[Rnd.Next(0, combinations.Count)], count);
             //var x = new FakeCombination(combinations[0], count);
             x.GetCards(cards, botcards);
         }
@@ -32,17 +31,15 @@ namespace PokerBot
                 if (user1.Id == 0) return;
                 var keyboard = new InlineKeyboardMarkup(new List<List<InlineKeyboardButton>>() { new List<InlineKeyboardButton>() { InlineKeyboardButton.WithCallbackData(user1.cards[0]), InlineKeyboardButton.WithCallbackData(user1.cards[1]) }, new List<InlineKeyboardButton>() { InlineKeyboardButton.WithCallbackData(combination) } });
                 var path = Operation.GetImage(x, user1);
-                using (var ms = new MemoryStream())
+                await using var ms = new MemoryStream();
+                path.Save(ms, ImageFormat.Jpeg);
+                path.Dispose();
+                ms.Position = 0;
+                try
                 {
-                    path.Save(ms, ImageFormat.Jpeg);
-                    path.Dispose();
-                    ms.Position = 0;
-                    try
-                    {
-                        await tgbot.SendPhotoAsync(user1.Id, new InputOnlineFile(ms), replyMarkup: keyboard);
-                    }
-                    catch { UserLeave(user1); }
+                    await tgbot.SendPhotoAsync(user1.Id, new InputOnlineFile(ms), replyMarkup: keyboard);
                 }
+                catch { UserLeave(user1); }
             }
             catch (Exception ex)
             {
@@ -87,7 +84,7 @@ namespace PokerBot
                 players[1].Money -= 25;
                 bet += 25;
                 SendMessage("Блайнд - 25 коинов.", new List<User>() { players[1] }, null, final: true);
-                if (count_players != 2)
+                if (countPlayers != 2)
                 {
                     var player1 = players[0];
                     var player2 = players[1];
@@ -124,10 +121,10 @@ namespace PokerBot
                     if (player.lastraise == lastraise && lastraise != 0) continue;
                     if (player.Id == 0)
                     {
-                        await Task.Delay(rnd.Next(300, 5000));
-                        if (rnd.Next(0, 3) == 2)
+                        await Task.Delay(Rnd.Next(300, 5000));
+                        if (Rnd.Next(0, 3) == 2)
                         {
-                            int round = rnd.Next(25, 100) * (openedCards.Count + 1);
+                            int round = Rnd.Next(25, 100) * (openedCards.Count + 1);
                             int raise = round - round % 10;
                             int raise1 = lastraise - player.lastraise + raise;
                             lastraise += raise;
@@ -136,7 +133,7 @@ namespace PokerBot
                             player.lastraise += raise1;
                             if (player.Money == 0) allInUsers.Add(player);
                             next = true;
-                            SendMessage($"Игрок {player.FirstName} повысил ставку на {raise} коинов.", player.room.players, null, true);
+                            SendMessage($"Игрок {player.FirstName} повысил ставку на {raise} коинов.", player.room.players, null);
                             continue;
                         }
                         else
@@ -162,7 +159,7 @@ namespace PokerBot
                 }
                 else if (openedCards.Count == 0 && lastraise == 25)
                 {
-                    if (count_players > 2) await DoBet(players[players.Count - 1]);
+                    if (countPlayers > 2) await DoBet(players[players.Count - 1]);
                     else await DoBet(players[1]);
                 }
                 if (!Operation.CheckRaise(players, lastraise))
@@ -197,8 +194,8 @@ namespace PokerBot
                         catch { UserLeave(user); }
                     }
                 }
-                SendMessage($"Вы находитесь в комнате {id} [{players.Count}/{count_players}].", players, null, final: true);
-                if (players.Count == count_players)
+                SendMessage($"Вы находитесь в комнате {id} [{players.Count}/{countPlayers}].", players, null, final: true);
+                if (players.Count == countPlayers)
                 {
                     SendMessage($"Новая игра начнеться через 10 секунд.", players, null, final: true);
                     await Task.Delay(5000);
@@ -208,9 +205,8 @@ namespace PokerBot
                 else UserLeave(players[0]);
                 SendMessage($"Недостаточно игроков для начала игры. Ожидание...", players, null);
                 var players1 = players.ToList();
-                Bot.rooms[Bot.rooms.IndexOf(this)] = new Room(players1, count_players, id);
+                Bot.rooms[Bot.rooms.IndexOf(this)] = new Room(players1, countPlayers, id);
                 //Bot.botrooms.IndexOf() Operation.CreateFakeRoom(count_players);
-                return;
             }
             catch
             {

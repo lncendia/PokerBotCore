@@ -1,4 +1,4 @@
-﻿namespace PokerBot
+﻿namespace PokerBotCore
 {
     class Combination
     {

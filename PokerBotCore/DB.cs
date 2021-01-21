@@ -1,6 +1,6 @@
 ﻿using Microsoft.EntityFrameworkCore;
 
-namespace PokerBot
+namespace PokerBotCore
 {
     class DB : DbContext
     {
