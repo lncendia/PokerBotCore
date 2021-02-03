@@ -4,20 +4,23 @@ using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using PokerBotCore.Bot;
+using PokerBotCore.Entities;
+using PokerBotCore.Keyboards;
 using Telegram.Bot.Types.InputFiles;
 using Telegram.Bot.Types.ReplyMarkups;
 
-namespace PokerBotCore
+namespace PokerBotCore.Rooms
 {
-    class FakeRoom : Room
+    public class FakeRoom : Room
     {
-        List<string> botcards = new List<string>();
-        static readonly List<Combination.Comb> combinations = new List<Combination.Comb>() { Combination.Comb.flush, Combination.Comb.kare, Combination.Comb.set, Combination.Comb.twopair };
-        public FakeRoom(User user, string FirstName, int count) : base(user, FirstName, count, false)
+        readonly List<string> _botcards = new List<string>();
+        static readonly List<Combination.Comb> Combinations = new List<Combination.Comb>() { Combination.Comb.flush, Combination.Comb.kare, Combination.Comb.set, Combination.Comb.twoPair };
+        public FakeRoom(User user, string firstName, int count) : base(user, firstName, count, false)
         {
-            var x = new FakeCombination(combinations[Rnd.Next(0, combinations.Count)], count);
+            var x = new FakeCombination(Combinations[Rnd.Next(0, Combinations.Count)], count);
             //var x = new FakeCombination(combinations[0], count);
-            x.GetCards(cards, botcards);
+            x.GetCards(cards, _botcards);
         }
         protected override async Task SendTable(User user1)
         {
@@ -27,23 +30,23 @@ namespace PokerBotCore
                 var x = openedCards.ToList();
                 x.Add(user1.cards[0]);
                 x.Add(user1.cards[1]);
-                var combination = Operation.CheckCombination(x, user1);
+                var combination = GameOperations.CheckCombination(x, user1);
                 if (user1.Id == 0) return;
                 var keyboard = new InlineKeyboardMarkup(new List<List<InlineKeyboardButton>>() { new List<InlineKeyboardButton>() { InlineKeyboardButton.WithCallbackData(user1.cards[0]), InlineKeyboardButton.WithCallbackData(user1.cards[1]) }, new List<InlineKeyboardButton>() { InlineKeyboardButton.WithCallbackData(combination) } });
-                var path = Operation.GetImage(x, user1);
+                var path = GameOperations.GetImage(x, user1);
                 await using var ms = new MemoryStream();
                 path.Save(ms, ImageFormat.Jpeg);
                 path.Dispose();
                 ms.Position = 0;
                 try
                 {
-                    await tgbot.SendPhotoAsync(user1.Id, new InputOnlineFile(ms), replyMarkup: keyboard);
+                    await TgBot.SendPhotoAsync(user1.Id, new InputOnlineFile(ms), replyMarkup: keyboard);
                 }
                 catch { UserLeave(user1); }
             }
             catch (Exception ex)
             {
-                Bot.reviews.Enqueue($"{user1.Id}:Эксепшн: {ex.Message}\nОбъект, вызвавший исключение: {ex.Source}\nМетод, вызвавший исключение: {ex.TargetSite}");
+                MainBot.reviews.Enqueue($"{user1.Id}:Эксепшн: {ex.Message}\nОбъект, вызвавший исключение: {ex.Source}\nМетод, вызвавший исключение: {ex.TargetSite}");
                 UserLeave(user1);
             }
         }
@@ -52,17 +55,17 @@ namespace PokerBotCore
             try
             {
                 endgame = true; //Для того, чтоб человек не мог выйти.
-                players[0].cards = botcards;
+                players[0].cards = _botcards;
                 players[0].state = User.State.play;
-                players[0].lastraise = 0;
+                players[0].lastRaise = 0;
                 players[0].combination = null;
                 players[0].bet = 0;
-                Operation.CheckCombination(players[0].cards, players[0]);
+                GameOperations.CheckCombination(players[0].cards, players[0]);
                 for (int i = 1; i < players.Count; i++)
                 {
                     User user1 = players[i];
                     user1.state = User.State.play;
-                    user1.lastraise = 0;
+                    user1.lastRaise = 0;
                     user1.combination = null;
                     user1.bet = 0;
                     user1.cards = new List<string>();
@@ -73,14 +76,14 @@ namespace PokerBotCore
                     user1.cards.Add(cards[card]);
                     cards.Remove(cards[card]);
 
-                    string combination = Operation.CheckCombination(user1.cards, user1);
+                    string combination = GameOperations.CheckCombination(user1.cards, user1);
                     var keyboard = new InlineKeyboardMarkup(new List<List<InlineKeyboardButton>>() { new List<InlineKeyboardButton>() { InlineKeyboardButton.WithCallbackData(user1.cards[0]), InlineKeyboardButton.WithCallbackData(user1.cards[1]) }, new List<InlineKeyboardButton>() { InlineKeyboardButton.WithCallbackData(combination) } });
                     SendMessage("Игра началась! \nВаши карты: ", new List<User>() { user1 }, keyboard, final: true);
                 }
-                players[0].lastraise = 10;
+                players[0].lastRaise = 10;
                 players[0].Money -= 10;
                 bet += 10;
-                players[1].lastraise = 25;
+                players[1].lastRaise = 25;
                 players[1].Money -= 25;
                 bet += 25;
                 SendMessage("Блайнд - 25 коинов.", new List<User>() { players[1] }, null, final: true);
@@ -96,7 +99,7 @@ namespace PokerBotCore
                     players = players1;
                 }
                 endgame = false;
-                lastraise = 25;
+                lastRaise = 25;
                 GameNext();
             }
             catch (Exception ex)
@@ -118,7 +121,7 @@ namespace PokerBotCore
                             return;
                         }
                     User player = players[i];
-                    if (player.lastraise == lastraise && lastraise != 0) continue;
+                    if (player.lastRaise == lastRaise && lastRaise != 0) continue;
                     if (player.Id == 0)
                     {
                         await Task.Delay(Rnd.Next(300, 5000));
@@ -126,21 +129,21 @@ namespace PokerBotCore
                         {
                             int round = Rnd.Next(25, 100) * (openedCards.Count + 1);
                             int raise = round - round % 10;
-                            int raise1 = lastraise - player.lastraise + raise;
-                            lastraise += raise;
+                            int raise1 = lastRaise - player.lastRaise + raise;
+                            lastRaise += raise;
                             bet += raise1;
                             player.Money -= raise1;
-                            player.lastraise += raise1;
+                            player.lastRaise += raise1;
                             if (player.Money == 0) allInUsers.Add(player);
                             next = true;
-                            SendMessage($"Игрок {player.FirstName} повысил ставку на {raise} коинов.", player.room.players, null);
+                            SendMessage($"Игрок {player.firstName} повысил ставку на {raise} коинов.", player.room.players, null);
                             continue;
                         }
                         else
                         {
-                            player.Money -= lastraise - player.lastraise;
-                            player.room.bet += lastraise - player.lastraise;
-                            player.lastraise += lastraise - player.lastraise;
+                            player.Money -= lastRaise - player.lastRaise;
+                            player.room.bet += lastRaise - player.lastRaise;
+                            player.lastRaise += lastRaise - player.lastRaise;
                             next = true;
                             continue;
                         }
@@ -157,17 +160,17 @@ namespace PokerBotCore
                     SetWinner();
                     return;
                 }
-                else if (openedCards.Count == 0 && lastraise == 25)
+                else if (openedCards.Count == 0 && lastRaise == 25)
                 {
                     if (countPlayers > 2) await DoBet(players[players.Count - 1]);
                     else await DoBet(players[1]);
                 }
-                if (!Operation.CheckRaise(players, lastraise))
+                if (!GameOperations.CheckRaise(players, lastRaise))
                 {
                     GameNext();
                     return;
                 }
-                lastraise = 0;
+                lastRaise = 0;
                 if (openedCards.Count == 0)
                     OpenCards(3);
                 else OpenCards();
@@ -188,7 +191,7 @@ namespace PokerBotCore
                     {
                         try
                         {
-                            await tgbot.SendTextMessageAsync(user.Id, "Недостаточно средств. Счет должен быть больше 100 коинов.", replyMarkup: Bot.keyboard);
+                            await TgBot.SendTextMessageAsync(user.Id, "Недостаточно средств. Счет должен быть больше 100 коинов.", replyMarkup: MainKeyboards.MainKeyboard);
                             UserLeave(user);
                         }
                         catch { UserLeave(user); }
@@ -205,8 +208,8 @@ namespace PokerBotCore
                 else UserLeave(players[0]);
                 SendMessage($"Недостаточно игроков для начала игры. Ожидание...", players, null);
                 var players1 = players.ToList();
-                Bot.rooms[Bot.rooms.IndexOf(this)] = new Room(players1, countPlayers, id);
-                //Bot.botrooms.IndexOf() Operation.CreateFakeRoom(count_players);
+                MainBot.rooms[MainBot.rooms.IndexOf(this)] = new Room(players1, countPlayers, id);
+                //Bot.botrooms.IndexOf() GameOperations.CreateFakeRoom(count_players);
             }
             catch
             {

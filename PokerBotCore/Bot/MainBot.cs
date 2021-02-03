@@ -4,32 +4,34 @@ using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
+using PokerBotCore.Entities;
+using PokerBotCore.Keyboards;
+using PokerBotCore.Payments;
+using PokerBotCore.Rooms;
 using Telegram.Bot;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.InputFiles;
 using Telegram.Bot.Types.ReplyMarkups;
 
-namespace PokerBotCore
+namespace PokerBotCore.Bot
 {
-    class Bot
+    internal static class MainBot
     {
         public static readonly TelegramBotClient Tgbot = new TelegramBotClient("1341769299:AAE4q84mx-NRrSJndKsCVNVLr-SzjYeN7wk");
         public static List<Room> rooms = new List<Room>();
-        public static List<User> chat = new List<User>();
+        private static readonly List<User> Chat = new List<User>();
         public static List<User> users;
         public static List<FakeRoom> botrooms = new List<FakeRoom>();
         public static Queue<string> reviews = new Queue<string>();
-        public static int roomsfortest = 0;
-        public static ReplyKeyboardMarkup keyboard = new ReplyKeyboardMarkup(new List<List<KeyboardButton>>() { new List<KeyboardButton>() { new KeyboardButton("🃏Список комнат"), new KeyboardButton("🥊Создать комнату") }, new List<KeyboardButton>() { new KeyboardButton("🎲Пополнить счет"), new KeyboardButton("💸Вывод") }, new List<KeyboardButton>() { new KeyboardButton("👤Профиль"), new KeyboardButton("⁉️Оставить отзыв") }, new List<KeyboardButton>() { new KeyboardButton("📬Игровой чат") } });
-        static readonly ReplyKeyboardMarkup KeyboardAdmin = new ReplyKeyboardMarkup(new List<List<KeyboardButton>>() { new List<KeyboardButton>() { new KeyboardButton("Рассылка"), new KeyboardButton("Комнаты с ботами") }, new List<KeyboardButton>() { new KeyboardButton("Добавить средства"), new KeyboardButton("Просмотр отзывов") }, new List<KeyboardButton>() { new KeyboardButton("/admin") } });
         public static void Start()
         {
             using DB db = new DB();
             users = db.Users.ToList();
             db.Dispose();
             Tgbot.OnMessage += Tgbot_OnMessage;
+            Tgbot.OnMessage += Admin.Tgbot_Admin;
             Tgbot.OnCallbackQuery += Tgbot_OnCallbackQuery;
-            Operation.Mute();
+            Operations.Mute();
             Tgbot.StartReceiving();
         }
 
@@ -42,17 +44,16 @@ namespace PokerBotCore
                 User user = users.FirstOrDefault(x => x.Id == e.CallbackQuery.From.Id);
                 if (user == null) return;
                 db.Update(user);
-                if (cb.Contains("public") && user.state == User.State.waitcount)
+                if (cb.Contains("public") && user.state == User.State.waitCount)
                 {
                     int count = Int32.Parse(cb.Substring(7));
                     Room room = new Room(user, e.CallbackQuery.From.FirstName, count, false);
                     user.room = room;
                     user.state = User.State.wait;
                     await Tgbot.DeleteMessageAsync(e.CallbackQuery.Message.Chat.Id, e.CallbackQuery.Message.MessageId);
-                    var keyboard1 = new InlineKeyboardMarkup(new List<List<InlineKeyboardButton>>() { { new List<InlineKeyboardButton>() { InlineKeyboardButton.WithCallbackData("Поделиться в чате", "sentroom") } }, new List<InlineKeyboardButton>() { InlineKeyboardButton.WithCallbackData("Отмена", "exit") } });
-                    await Tgbot.SendTextMessageAsync(e.CallbackQuery.From.Id, $"Создана комната с ID {room.id}. Ожидаем подключения других игроков.", replyMarkup: keyboard1);
+                    await Tgbot.SendTextMessageAsync(e.CallbackQuery.From.Id, $"Создана комната с ID {room.id}. Ожидаем подключения других игроков.", replyMarkup: MainKeyboards.CreateRoomKeyboard);
                 }
-                else if (cb.Contains("private") && user.state == User.State.waitcount)
+                else if (cb.Contains("private") && user.state == User.State.waitCount)
                 {
                     int count = Int32.Parse(cb.Substring(8));
                     Room room = new Room(user, e.CallbackQuery.From.FirstName, count, true);
@@ -60,12 +61,11 @@ namespace PokerBotCore
                     rooms.Add(room);
                     user.state = User.State.wait;
                      await Tgbot.DeleteMessageAsync(e.CallbackQuery.From.Id, e.CallbackQuery.Message.MessageId);
-                    var keyboard1 = new InlineKeyboardMarkup(InlineKeyboardButton.WithCallbackData("Отмена", "exit"));
-                     await Tgbot.SendTextMessageAsync(e.CallbackQuery.From.Id, $"Создана комната с ID {room.id}. Ожидаем подключения других игроков.", replyMarkup: keyboard1);
+                     await Tgbot.SendTextMessageAsync(e.CallbackQuery.From.Id, $"Создана комната с ID {room.id}. Ожидаем подключения других игроков.", replyMarkup: MainKeyboards.CreatePrivateRoomKeyboard);
                 }
                 else if (cb.StartsWith("bill"))
                 {
-                    if (Operation.CheckPay(user, cb.Substring(5)))
+                    if (Transactions.CheckPay(user, cb.Substring(5)))
                     {
                         string message = e.CallbackQuery.Message.Text;
                         message = message.Replace("Не оплачено", "Оплачено");
@@ -77,26 +77,27 @@ namespace PokerBotCore
                     long id;
                     try
                     {
-                        id = Int64.Parse(cb.Substring(4));
+                        id = long.Parse(cb.Substring(4));
                     }
                     catch { return; }
                     User info = users.FirstOrDefault(x => x.Id == id);
                     if (info == null)
                     {
-                         await Tgbot.AnswerCallbackQueryAsync(e.CallbackQuery.Id, $"Пользователь не найден.");
+                        await Tgbot.AnswerCallbackQueryAsync(e.CallbackQuery.Id, $"Пользователь не найден.");
                         return;
                     }
                     var f = db.Friendships.FirstOrDefault(friendship => (friendship.User1 == user.Id && friendship.User2 == info.Id) || (friendship.User1 == info.Id && friendship.User2 == user.Id));
                     if (f == null)
                     {
-                         await Tgbot.AnswerCallbackQueryAsync(e.CallbackQuery.Id, $"Заявка была отклонена пользователем.");
+                        await Tgbot.AnswerCallbackQueryAsync(e.CallbackQuery.Id, "Заявка была отклонена пользователем.");
                         return;
                     }
                     if (f.Accepted)
                     {
-                         await Tgbot.AnswerCallbackQueryAsync(e.CallbackQuery.Id, $"Вы уже друзья.");
+                         await Tgbot.AnswerCallbackQueryAsync(e.CallbackQuery.Id, "Вы уже друзья.");
                         return;
-                    };
+                    }
+
                     f.Accepted = true;
                     await db.SaveChangesAsync();
                     await Tgbot.AnswerCallbackQueryAsync(e.CallbackQuery.Id, $"Запрос принят.");
@@ -105,7 +106,7 @@ namespace PokerBotCore
                 {
                     case "exit":
                          await Tgbot.DeleteMessageAsync(e.CallbackQuery.From.Id, e.CallbackQuery.Message.MessageId);
-                        if (user.state == User.State.wait || user.state == User.State.waitbet || user.state == User.State.play)
+                        if (user.state == User.State.wait || user.state == User.State.waitBet || user.state == User.State.play)
                         {
                             while (user.room.endgame) { }
                             user.room.UserLeave(user);
@@ -113,27 +114,30 @@ namespace PokerBotCore
                          await Tgbot.AnswerCallbackQueryAsync(e.CallbackQuery.Id, $"Вы покинули комнату.");
                         break;
                     case "sentroom":
-                        if (user.state != User.State.wait) return;
-                        var keyboard1 = new InlineKeyboardMarkup(InlineKeyboardButton.WithCallbackData("Отмена", "exit"));
-                         await Tgbot.EditMessageTextAsync(e.CallbackQuery.From.Id, e.CallbackQuery.Message.MessageId, e.CallbackQuery.Message.Text, replyMarkup: keyboard1);
+                        if (user.state != User.State.wait)
+                        {
+                            await Tgbot.DeleteMessageAsync(e.CallbackQuery.From.Id, e.CallbackQuery.Message.MessageId);
+                            return;
+                        }
+                        await Tgbot.EditMessageTextAsync(e.CallbackQuery.From.Id, e.CallbackQuery.Message.MessageId, e.CallbackQuery.Message.Text, replyMarkup: MainKeyboards.CreatePrivateRoomKeyboard);
                          SendMessageToChat($"Приглашаю вас в комнату {user.room.id}.", e.CallbackQuery.From.Username, user, new InlineKeyboardMarkup(InlineKeyboardButton.WithCallbackData($"Комната {user.room.id} [{user.room.players.Count}/{user.room.countPlayers}]", user.room.id.ToString())));
                          await Tgbot.AnswerCallbackQueryAsync(e.CallbackQuery.Id, $"Приглашение отправлено.");
                         break;
                     case "Raise":
-                        if (user.state == User.State.waitbet)
+                        if (user.state == User.State.waitBet)
                         {
                              await Tgbot.SendTextMessageAsync(e.CallbackQuery.From.Id, $"Введите колличество. На вашем счету {user.Money} коинов. Максимальная ставка: 1000 коинов.");
                         }
                         break;
                     case "Call":
-                        if (user.state == User.State.waitbet)
+                        if (user.state == User.State.waitBet)
                         {
-                            var x = user.room.lastraise - user.lastraise;
+                            var x = user.room.lastRaise - user.lastRaise;
                             if (user.Money >= x)
                             {
                                 user.Money -= x;
                                 user.room.bet += x;
-                                user.lastraise += x;
+                                user.lastRaise += x;
                                 user.bet += x;
                                 if (user.Money == 0) user.room.allInUsers.Add(user);
                                 user.room.next = true;
@@ -143,35 +147,34 @@ namespace PokerBotCore
                             }
                             else
                             {
-                                var key = new InlineKeyboardMarkup(InlineKeyboardButton.WithCallbackData("Ва-банк", "VA-Bank"));
-                                await Tgbot.SendTextMessageAsync(e.CallbackQuery.From.Id, $"Недостаточно средств!", replyMarkup: key);
+                                await Tgbot.SendTextMessageAsync(e.CallbackQuery.From.Id, $"Недостаточно средств!", replyMarkup: GameKeyboards.VaBank);
                             }
                         }
                         await Tgbot.DeleteMessageAsync(e.CallbackQuery.From.Id, e.CallbackQuery.Message.MessageId);
                         break;
                     case "VA-Bank":
-                        if (user.state == User.State.waitbet)
+                        if (user.state == User.State.waitBet)
                         {
-                            if (user.Money < user.room.lastraise - user.lastraise)
+                            if (user.Money < user.room.lastRaise - user.lastRaise)
                             {
                                 user.room.allInUsers.Add(user);
                                 user.room.bet += user.Money;
                                 user.bet += user.Money;
-                                user.lastraise += user.Money;
+                                user.lastRaise += user.Money;
                                 user.Money = 0;
                                 user.room.next = true;
                                  await Tgbot.AnswerCallbackQueryAsync(e.CallbackQuery.Id, "Ход переходит к следующему игроку.");
                                 db.UpdateRange(user);
                                 await db.SaveChangesAsync();
-                                user.room.SendMessage($"Игрок {user.FirstName} пошел ва-банк.", user.room.players, null);
+                                user.room.SendMessage($"Игрок {user.firstName} пошел ва-банк.", user.room.players, null);
                             }
                         }
                         await Tgbot.DeleteMessageAsync(e.CallbackQuery.From.Id, e.CallbackQuery.Message.MessageId);
                         break;
                     case "Check":
-                        if (user.state == User.State.waitbet)
+                        if (user.state == User.State.waitBet)
                         {
-                            if (user.room.lastraise == 0 || user.room.lastraise - user.lastraise == 0)
+                            if (user.room.lastRaise == 0 || user.room.lastRaise - user.lastRaise == 0)
                             {
                                 user.room.next = true;
                                  await Tgbot.AnswerCallbackQueryAsync(e.CallbackQuery.Id, "Ход переходит к следующему игроку.");
@@ -185,14 +188,14 @@ namespace PokerBotCore
                         await Tgbot.DeleteMessageAsync(e.CallbackQuery.From.Id, e.CallbackQuery.Message.MessageId);
                         break;
                     case "Fold":
-                        if (user.state == User.State.waitbet)
+                        if (user.state == User.State.waitBet)
                         {
                             user.combination = null;
                             user.room.next = true;
                             user.room.foldUsers.Add(user);
-                            user.lastraise = 0;
+                            user.lastRaise = 0;
                             await Tgbot.AnswerCallbackQueryAsync(e.CallbackQuery.Id, "Ход переходит к следующему игроку.");
-                            user.room.SendMessage($"Игрок {user.FirstName} сбросил карты.", user.room.players, null);
+                            user.room.SendMessage($"Игрок {user.firstName} сбросил карты.", user.room.players, null);
                         }
                         await Tgbot.DeleteMessageAsync(e.CallbackQuery.From.Id, e.CallbackQuery.Message.MessageId);
                         break;
@@ -206,17 +209,22 @@ namespace PokerBotCore
                                 image.Dispose();
                                 ms.Position = 0;
                                 await Tgbot.SendPhotoAsync(e.CallbackQuery.From.Id, new InputOnlineFile(ms), caption: "Ваш нынешний фон.");
-                                await Tgbot.SendTextMessageAsync(e.CallbackQuery.From.Id, "Отправьте фотографию фона, который хотите установить.", replyMarkup: new InlineKeyboardMarkup(InlineKeyboardButton.WithCallbackData("Установить стандартный фон", "standart_table")));
+                                await Tgbot.SendTextMessageAsync(e.CallbackQuery.From.Id, "Отправьте фотографию фона, который хотите установить.", replyMarkup: new InlineKeyboardMarkup(InlineKeyboardButton.WithCallbackData("Установить стандартный фон", "standard_table")));
                             }
-                            user.state = User.State.change_table;
+                            user.state = User.State.changeTable;
                         }
                         break;
                     case "standard_table":
-                        if (user.state == User.State.change_table)
+                        if (user.state == User.State.changeTable || user.state==User.State.main)
                         {
-                             await Tgbot.DeleteMessageAsync(e.CallbackQuery.From.Id, e.CallbackQuery.Message.MessageId);
+                            await Tgbot.DeleteMessageAsync(e.CallbackQuery.From.Id, e.CallbackQuery.Message.MessageId);
                             File.Delete($"tables\\{user.Id}.jpg");
+                            await Tgbot.AnswerCallbackQueryAsync(e.CallbackQuery.Id, "Фон изменен на стандартный.");
                             user.state = User.State.main;
+                        }
+                        else
+                        {
+                            await Tgbot.AnswerCallbackQueryAsync(e.CallbackQuery.Id, "Невозможно изменить фон сейчас.");
                         }
                         break;
                     case "friends":
@@ -236,25 +244,25 @@ namespace PokerBotCore
                                 {
                                     var user2 = await Tgbot.GetChatMemberAsync((int) friend.User2, (int) friend.User2);
                                     var friendUser = users.FirstOrDefault(x => x.Id == friend.User2);
-                                    string online = friendUser != null && friendUser.count_messages > 0 ? "В сети" : "Не в сети";
+                                    string online = friendUser != null && friendUser.countMessages > 0 ? "В сети" : "Не в сети";
                                     if (friendUser?.room!=null && friendUser.state == User.State.wait)
                                     {
-                                        friends += $"(<a href =\"https://telegram.me/PokerGame777_bot?start=remove_{friend.ID}\">-</a>)@{user2.User.Username} (<a href =\"https://telegram.me/PokerGame777_bot?start=connect_{friendUser.room.id}\">В игре</a>)\n";
+                                        friends += $"(<a href =\"https://telegram.me/PokerGame777_bot?start=remove_{friend.Id}\">-</a>)@{user2.User.Username} (<a href =\"https://telegram.me/PokerGame777_bot?start=connect_{friendUser.room.id}\">В игре</a>)\n";
                                     }
                                     else
-                                        friends += $"(<a href =\"https://telegram.me/PokerGame777_bot?start=remove_{friend.ID}\">-</a>)@{user2.User.Username} ({online})\n";
+                                        friends += $"(<a href =\"https://telegram.me/PokerGame777_bot?start=remove_{friend.Id}\">-</a>)@{user2.User.Username} ({online})\n";
                                 }
                                 else
                                 {
                                     var user2 =  await Tgbot.GetChatMemberAsync((int)friend.User1, (int)friend.User1);
                                     var friendUser = users.FirstOrDefault(x => x.Id == friend.User1);
-                                    string online = friendUser != null && friendUser.count_messages > 0 ? "В сети." : "Не в сети.";
+                                    string online = friendUser != null && friendUser.countMessages > 0 ? "В сети." : "Не в сети.";
                                     if (friendUser?.room != null && friendUser.state == User.State.wait)
                                     {
-                                        friends += $"(<a href =\"https://telegram.me/PokerGame777_bot?start=remove_{friend.ID}\">-</a>)@{user2.User.Username} (<a href =\"https://telegram.me/PokerGame777_bot?start=connect_{friendUser.room.id}\">В игре</a>)\n";
+                                        friends += $"(<a href =\"https://telegram.me/PokerGame777_bot?start=remove_{friend.Id}\">-</a>)@{user2.User.Username} (<a href =\"https://telegram.me/PokerGame777_bot?start=connect_{friendUser.room.id}\">В игре</a>)\n";
                                     }
                                     else
-                                        friends += $"(<a href =\"https://telegram.me/PokerGame777_bot?start=remove_{friend.ID}\">-</a>)@{user2.User.Username} ({online})\n";
+                                        friends += $"(<a href =\"https://telegram.me/PokerGame777_bot?start=remove_{friend.Id}\">-</a>)@{user2.User.Username} ({online})\n";
                                 }
 
                             }
@@ -267,7 +275,7 @@ namespace PokerBotCore
                         {
                             user.state = User.State.answer;
                             await Tgbot.AnswerCallbackQueryAsync(e.CallbackQuery.Id, "Введите сообщение.");
-                            user.id_for_answer = int.Parse(cb);
+                            user.idForAnswer = int.Parse(cb);
                             return;
                         }
                         if (user.state != User.State.main && user.state != User.State.chat) return;
@@ -281,19 +289,19 @@ namespace PokerBotCore
                         {
                             return;
                         }
-                        if (user.Money < 10) ////////////////////////////////////////////////////////////
+                        if (user.Money < 40) ////////////////////////////////////////////////////////////
                         {
-                             await Tgbot.AnswerCallbackQueryAsync(e.CallbackQuery.Id, "Недостаточно средств. Счет должен быть больше 100 коинов.");
+                             await Tgbot.AnswerCallbackQueryAsync(e.CallbackQuery.Id, "Недостаточно средств. Счет должен быть больше 40 коинов.");
                             return;
                         }
-                        var room = Operation.GetRoom(Convert.ToInt32(cb));
+                        var room = Operations.GetRoom(Convert.ToInt32(cb));
                         if (room != null)
                         {
                             await Tgbot.AnswerCallbackQueryAsync(e.CallbackQuery.Id, "Вы покинули чат.");
                             if (room.key != 0)
                             {
-                                user.id_privateroom = idRoom;
-                                user.state = User.State.codprvt;
+                                user.idPrivateRoom = idRoom;
+                                user.state = User.State.codPrivate;
                                 await Tgbot.SendTextMessageAsync(e.CallbackQuery.From.Id, $"Введите пароль.");
                             }
                             else
@@ -315,12 +323,14 @@ namespace PokerBotCore
             try
             {
                 var message = e.Message;
-                if (message.Type != Telegram.Bot.Types.Enums.MessageType.Text && message.Type != Telegram.Bot.Types.Enums.MessageType.Photo) return;
-                var user = users.FirstOrDefault(x=>x.Id==message.From.Id);
+                if (message.Type != MessageType.Text && message.Type != MessageType.Photo) return;
+                var user = Operations.GetUser(message.From.Id);
                 if (user != null)
                 {
-                    user.count_messages++;
-                    switch (user.count_messages)
+                    if (user.state == User.State.answer ||
+                        user.state == User.State.mailing || user.state == User.State.addCoin) return;
+                    user.countMessages++;
+                    switch (user.countMessages)
                     {
                         case 10:
                             await Tgbot.SendTextMessageAsync(message.Chat.Id, "Пожалуйста, не флудите.");
@@ -329,11 +339,11 @@ namespace PokerBotCore
                             await Tgbot.SendTextMessageAsync(message.Chat.Id, "Прекратите флуд.");
                             break;
                         case 30:
-                            await Tgbot.SendTextMessageAsync(message.Chat.Id, $"Вам выдан мут до {Operation.time.ToString("HH:mm:ss")}");
+                            await Tgbot.SendTextMessageAsync(message.Chat.Id, $"Вам выдан мут до {Operations.time:HH:mm:ss}");
                             return;
                         default:
                         {
-                            if (user.count_messages > 30)
+                            if (user.countMessages > 30)
                             {
                                 return;
                             }
@@ -356,15 +366,12 @@ namespace PokerBotCore
                             int idRoom = Int32.Parse(message.Text.Split('_')[1]);
                             Room room = rooms.Find((room1 => room1.id == idRoom));
                             if(room==null) return;
-                            InlineKeyboardButton key;
-                            if (room.key != 0) key = InlineKeyboardButton.WithCallbackData($"🔒Комната {room.id} [{room.players.Count}/{room.countPlayers}]", room.id.ToString());
-                            else key = InlineKeyboardButton.WithCallbackData($"Комната {room.id} [{room.players.Count}/{room.countPlayers}]", room.id.ToString());
-                            await Tgbot.SendTextMessageAsync(user.Id, $"Комната вашего друга:",replyMarkup: new InlineKeyboardMarkup(key));
+                            await Tgbot.SendTextMessageAsync(user.Id, $"Комната вашего друга:",replyMarkup: MainKeyboards.CreateConnectButton(room));
                         }
                         if (message.Text.Contains("remove_") && user != null)
                         {
                             long id = Int64.Parse(message.Text.Split('_')[1]);
-                            Friendship friendship = db.Friendships.FirstOrDefault(x => x.ID == id);
+                            Friendship friendship = db.Friendships.FirstOrDefault(x => x.Id == id);
                             if(friendship==null) return;
                             if (friendship.User1 == user.Id || friendship.User2 == user.Id)
                             {
@@ -379,7 +386,7 @@ namespace PokerBotCore
                         {
                             long id = long.Parse(message.Text.Split(' ')[1]);
                             refer = users.FirstOrDefault(x => x.Id == id);
-                            if (refer.Id == message.Chat.Id) refer = null;
+                            if (refer != null && refer.Id == message.Chat.Id) refer = null;
                         }
                         catch { refer = null; }
                         if (refer != null)
@@ -398,90 +405,54 @@ namespace PokerBotCore
                         if(refer!=null)db.Update(refer);
                         await db.Users.AddAsync(userToAdd);
                         await db.SaveChangesAsync();
-                        await Tgbot.SendTextMessageAsync(message.Chat.Id, $"Добро пожаловать! Пополни свой счет и вперед играть!\nТвоя реферальная ссылка: https://t.me/PokerGame777_bot?start={message.From.Id} \nЗа каждого приглашенного игрока вы будете получать 7% от его пополнений.", replyMarkup: keyboard);
+                        await Tgbot.SendTextMessageAsync(message.Chat.Id, $"Добро пожаловать! Пополни свой счет и вперед играть!\nТвоя реферальная ссылка: https://t.me/PokerGame777_bot?start={message.From.Id} \nЗа каждого приглашенного игрока вы будете получать 7% от его пополнений.", replyMarkup: MainKeyboards.MainKeyboard);
                         return;
                     }
                     if (user == null) return;
-                    #region admin
-                    if (user.state == User.State.admin)
-                    {
-                        switch (message.Text)
-                        {
-                            case "/admin":
-                                 await Tgbot.SendTextMessageAsync(message.Chat.Id, "Вы вышли из меню админа.", replyMarkup: keyboard);
-                                user.state = User.State.main;
-                                break;
-                            case "Рассылка":
-                                 await Tgbot.SendTextMessageAsync(message.Chat.Id, "Введите сообщение.");
-                                user.state = User.State.mailing;
-                                break;
-                            case "Добавить средства":
-                                 await Tgbot.SendTextMessageAsync(message.Chat.Id, "Введите сообщение в формате: <id>:<Money>");
-                                user.state = User.State.add_coin;
-                                break;
-                            case "Просмотр отзывов":
-                                while (reviews.Count != 0)
-                                {
-                                    var x = reviews.Dequeue().Split(new char[] { ':' }, 2);
-                                    var id = new InlineKeyboardMarkup(InlineKeyboardButton.WithCallbackData("Ответить", x[0]));
-                                     await Tgbot.SendTextMessageAsync(message.Chat.Id, x[1], replyMarkup: id);
-                                }
-                                break;
-                        }
-                        return;
-                    }
-                    #endregion
                     switch (message.Text)
                     {
                         case "🥊Создать комнату":
-                            if (user.state == User.State.wait || user.state == User.State.waitbet || user.state == User.State.play) return;
-                            if (user.Money < 10)//////////////////////////////
+                            if (user.state == User.State.wait || user.state == User.State.waitBet || user.state == User.State.play) return;
+                            if (user.Money < 40)//////////////////////////////
                             {
-                                await Tgbot.SendTextMessageAsync(message.Chat.Id, "Недостаточно средств. Счет должен быть больше 100 коинов.");
+                                await Tgbot.SendTextMessageAsync(message.Chat.Id, "Недостаточно средств. Счет должен быть больше 40 коинов.");
                                 return;
                             }
-                            user.state = User.State.waitcount;
+                            user.state = User.State.waitCount;
                              await Tgbot.SendTextMessageAsync(message.Chat.Id, "Введите количество мест. От 2 до 5.");
                             break;
                         case "🃏Список комнат":
-                            if (user.state == User.State.wait || user.state == User.State.waitbet || user.state == User.State.play) return;
+                            if (user.state == User.State.wait || user.state == User.State.waitBet || user.state == User.State.play) return;
                             user.state = User.State.main;
-                            var key = new List<List<InlineKeyboardButton>>();
-                            foreach (Room room in rooms)
-                            {
-                                if (key.Count == 50) break;
-                                if ((room.players.Count != 0 && room.players[0].state != User.State.wait)) continue;
-                                if (room.key != 0) key.Add(new List<InlineKeyboardButton>() { InlineKeyboardButton.WithCallbackData($"🔒Комната {room.id} [{room.players.Count}/{room.countPlayers}]", room.id.ToString()) });
-                                else key.Add(new List<InlineKeyboardButton>() { InlineKeyboardButton.WithCallbackData($"Комната {room.id} [{room.players.Count}/{room.countPlayers}]", room.id.ToString()) });
-                            }
-                            if (key.Count != 0)
-                                 await Tgbot.SendTextMessageAsync(message.Chat.Id, "Показаны первые 50 комнат. Вы можете ввести ID нужной вам комнаты.", replyMarkup: new InlineKeyboardMarkup(key));
+                            var key = MainKeyboards.CreateConnectButton(rooms);
+                            if (key.InlineKeyboard.Count() != 0)
+                                 await Tgbot.SendTextMessageAsync(message.Chat.Id, "Показаны первые 50 комнат. Вы можете ввести ID нужной вам комнаты.", replyMarkup: key);
                             else
                                  await Tgbot.SendTextMessageAsync(message.Chat.Id, "Комнаты не найдены.");
                             break;
                         case "Выход":
-                            if (user.state == User.State.wait || user.state == User.State.waitbet || user.state == User.State.play)
+                            if (user.state == User.State.wait || user.state == User.State.waitBet || user.state == User.State.play)
                             {
                                  await Tgbot.SendTextMessageAsync(message.Chat.Id, "Вы уверены?", replyMarkup: new InlineKeyboardMarkup(InlineKeyboardButton.WithCallbackData("Да", "exit")));
                             }
                             break;
                         case "🎲Пополнить счет":
-                            if (user.state == User.State.wait || user.state == User.State.waitbet || user.state == User.State.play) return;
+                            if (user.state == User.State.wait || user.state == User.State.waitBet || user.state == User.State.play) return;
                              await Tgbot.SendTextMessageAsync(user.Id, "Введите сумму, на которую хотите пополнить баланс.");
-                            user.state = User.State.waitmoney;
+                            user.state = User.State.waitMoney;
                             break;
                         case "💸Вывод":
-                            if (user.state == User.State.wait || user.state == User.State.waitbet || user.state == User.State.play) return;
+                            if (user.state == User.State.wait || user.state == User.State.waitBet || user.state == User.State.play) return;
                             user.state = User.State.output;
                              await Tgbot.SendTextMessageAsync(message.Chat.Id, "Введите сумму, которую хотите вывести.");
                             break;
                         case "⁉️Оставить отзыв":
-                            if (user.state == User.State.wait || user.state == User.State.waitbet || user.state == User.State.play) return;
+                            if (user.state == User.State.wait || user.state == User.State.waitBet || user.state == User.State.play) return;
                              await Tgbot.SendTextMessageAsync(message.Chat.Id, "Напишите отзыв. Он будет отпрален автору бота.");
                             user.state = User.State.feedback;
                             break;
                         case "👤Профиль":
-                            if (user.state == User.State.wait || user.state == User.State.waitbet || user.state == User.State.play) return;
+                            if (user.state == User.State.wait || user.state == User.State.waitBet || user.state == User.State.play) return;
                             user.state = User.State.main;
                             string str = $"Ваш ID: {user.Id}\nВаши средства: {user.Money}\nВаша реферальная ссылка: https://t.me/PokerGame777_bot?start={message.From.Id}";
                             if (user.Referal != null)
@@ -492,23 +463,32 @@ namespace PokerBotCore
                             await Tgbot.SendTextMessageAsync(message.Chat.Id, str, replyMarkup: new InlineKeyboardMarkup(new List<InlineKeyboardButton>() { InlineKeyboardButton.WithCallbackData("Друзья", "friends"), InlineKeyboardButton.WithCallbackData("Сменить фон стола", "change_table") }));
                             break;
                         case "📬Игровой чат":
-                            if (user.state == User.State.wait || user.state == User.State.waitbet || user.state == User.State.play) return;
+                            if (user.state == User.State.wait || user.state == User.State.waitBet || user.state == User.State.play) return;
                             user.state = User.State.chat;
-                            chat.Add(user);
+                            Chat.Add(user);
                              await Tgbot.SendTextMessageAsync(message.Chat.Id, "Вы вошли в игровой чат.", replyMarkup: new ReplyKeyboardMarkup(new List<KeyboardButton>() { new KeyboardButton("Покинуть чат") }));
                             break;
                         case "/admin":
-                            if (user.Id != 346978522) return;
-                            if (user.state == User.State.wait || user.state == User.State.waitbet || user.state == User.State.play) return;
-                            user.state = User.State.admin;
-                             await Tgbot.SendTextMessageAsync(message.Chat.Id, "Добро пожаловать в админ-панель.", replyMarkup: KeyboardAdmin);
+                            if(e.Message.From.Id!=346978522) return;
+                            if (user.state == User.State.admin)
+                            {
+                                await MainBot.Tgbot.SendTextMessageAsync(e.Message.Chat.Id, "Вы вышли из меню админа.",
+                                    replyMarkup: MainKeyboards.MainKeyboard);
+                                user.state = User.State.main;
+                            }
+                            else
+                            {
+                                user.state = User.State.admin;
+                                await MainBot.Tgbot.SendTextMessageAsync(e.Message.Chat.Id, "Добро пожаловать в админ-панель.",
+                                    replyMarkup: MainKeyboards.AdminKeyboard);
+                            }
                             break;
                         default:
                             int raise;
                             DB db;
                             switch (user.state)
                             {
-                                case User.State.waitcount:
+                                case User.State.waitCount:
                                     int count;
                                     try
                                     {
@@ -538,7 +518,7 @@ namespace PokerBotCore
                                          await Tgbot.SendTextMessageAsync(message.Chat.Id, "Введите число!");
                                         return;
                                     }
-                                    Room room = Operation.GetRoom(id);
+                                    Room room = Operations.GetRoom(id);
                                     if (room == null || (room.players.Count != 0 && room.players[0].state != User.State.wait))
                                     {
                                          await Tgbot.SendTextMessageAsync(message.Chat.Id, "Комната не существует или игра в ней уже началась.");
@@ -550,7 +530,7 @@ namespace PokerBotCore
                                     };
                                      await Tgbot.SendTextMessageAsync(message.Chat.Id, "Список комнат:", replyMarkup: new InlineKeyboardMarkup(keyb));
                                     break;
-                                case User.State.waitbet:
+                                case User.State.waitBet:
                                 {
                                     try
                                     {
@@ -571,27 +551,27 @@ namespace PokerBotCore
                                         await Tgbot.SendTextMessageAsync(message.Chat.Id, "Недостаточно средств!");
                                         return;
                                     }
-                                    if (raise < 2)/////////////////////////////////////////////////
+                                    if (raise < 25)/////////////////////////////////////////////////
                                     {
                                         await Tgbot.SendTextMessageAsync(message.Chat.Id, "Ставка должна быть больше 25 коинов.");
                                         return;
                                     }
                                     db = new DB();
-                                        int raise1 = user.room.lastraise - user.lastraise + raise;
+                                        int raise1 = user.room.lastRaise - user.lastRaise + raise;
                                         Console.WriteLine(raise1);
                                         user.bet += raise1;
-                                        user.room.lastraise += raise;
+                                        user.room.lastRaise += raise;
                                         user.room.bet += raise1;
                                         user.Money -= raise1;
-                                        user.lastraise += raise1;
+                                        user.lastRaise += raise1;
                                         if (user.Money == 0) user.room.allInUsers.Add(user);
                                         user.room.next = true;
                                         db.UpdateRange(user);
                                         await db.SaveChangesAsync();
-                                        user.room.SendMessage($"Игрок {user.FirstName} повысил ставку на {raise} коинов.", user.room.players, null);
+                                        user.room.SendMessage($"Игрок {user.firstName} повысил ставку на {raise} коинов.", user.room.players, null);
                                         break;
                                 }
-                                case User.State.waitmoney:
+                                case User.State.waitMoney:
                                     try
                                     {
                                         raise = int.Parse(message.Text);
@@ -612,13 +592,13 @@ namespace PokerBotCore
                                         return;
                                     }
                                     var billId = "";
-                                    var pay_url = Operation.AddTransaction(raise, user, ref billId);
-                                    if (pay_url == null)
+                                    var payUrl = Transactions.NewTransaction(raise, user, ref billId);
+                                    if (payUrl == null)
                                     {
                                          await Tgbot.SendTextMessageAsync(message.Chat.Id, "Произошла ошибка. Попробуйте еще раз.");
                                         return;
                                     }
-                                    await Tgbot.SendTextMessageAsync(message.Chat.Id, $"Пополнение счета на сумму {raise} р.\nДата: {DateTime.Now:dd.MMM.yyyy}\nСтатус: Не оплачено.\n\nОплатите счет по ссылке.\n{pay_url}", replyMarkup: new InlineKeyboardMarkup(InlineKeyboardButton.WithCallbackData("Проверить оплату", $"bill_{billId}")));
+                                    await Tgbot.SendTextMessageAsync(message.Chat.Id, $"Пополнение счета на сумму {raise} р.\nДата: {DateTime.Now:dd.MMM.yyyy}\nСтатус: Не оплачено.\n\nОплатите счет по ссылке.\n{payUrl}", replyMarkup: new InlineKeyboardMarkup(InlineKeyboardButton.WithCallbackData("Проверить оплату", $"bill_{billId}")));
                                     user.state = User.State.main;
                                     break;
                                 case User.State.output:
@@ -644,15 +624,15 @@ namespace PokerBotCore
                                     }
                                     user.output = money;
                                      await Tgbot.SendTextMessageAsync(message.Chat.Id, "Введите номер QIWI кошелька, на который будет осуществляться вывод.\nФормат: +<код страны><номер>");
-                                    user.state = User.State.output_waitnumber;
+                                    user.state = User.State.outputWaitNumber;
                                     break;
-                                case User.State.output_waitnumber:
+                                case User.State.outputWaitNumber:
                                     if (!message.Text.Contains("+"))
                                     {
                                          await Tgbot.SendTextMessageAsync(message.Chat.Id, "Номер должен начинаться с \"+\"");
                                         return;
                                     }
-                                    bool success = Operation.OutputMoney(message.Text, user);
+                                    bool success = Transactions.OutputTransaction(message.Text, user);
                                     user.output = 0;
                                     user.state = User.State.main;
                                     if (success)
@@ -664,7 +644,7 @@ namespace PokerBotCore
                                          await Tgbot.SendTextMessageAsync(message.Chat.Id, "Произошла ошибка. Попробуйте позже.");
                                     }
                                     break;
-                                case User.State.codprvt:
+                                case User.State.codPrivate:
                                     int keyRoom;
                                     try
                                     {
@@ -675,17 +655,17 @@ namespace PokerBotCore
                                          await Tgbot.SendTextMessageAsync(message.Chat.Id, "Введите число!");
                                         return;
                                     }
-                                    room = Operation.GetRoom(user.id_privateroom);
+                                    room = Operations.GetRoom(user.idPrivateRoom);
                                     if (room == null)
                                     {
                                          await Tgbot.SendTextMessageAsync(message.Chat.Id, "Комната не доступна для подключения. Возможно игра в ней уже началась.");
-                                        user.id_privateroom = 0;
+                                        user.idPrivateRoom = 0;
                                         return;
                                     }
                                     if (room.key != 0 && room.key == keyRoom)
                                     {
                                         room.AddPlayer(user, message.Chat.FirstName);
-                                        user.id_privateroom = 0;
+                                        user.idPrivateRoom = 0;
                                     }
                                     else
                                     {
@@ -701,72 +681,32 @@ namespace PokerBotCore
                                     if (message.Text.Equals("Покинуть чат"))
                                     {
                                         user.state = User.State.main;
-                                         await Tgbot.SendTextMessageAsync(message.Chat.Id, "Вы покинули чат.", replyMarkup: keyboard);
+                                        await Tgbot.SendTextMessageAsync(message.Chat.Id, "Вы покинули чат.", replyMarkup: MainKeyboards.MainKeyboard);
+                                        break;
                                     }
                                     SendMessageToChat(message.Text, message.From.Username, user, null);
-                                    break;
-                                case User.State.answer:
-                                    try
-                                    {
-                                         await Tgbot.SendTextMessageAsync(user.id_for_answer, $"Администратор {message.Chat.FirstName} ответил вам: {message.Text}");
-                                         await Tgbot.SendTextMessageAsync(message.Chat.Id, "Сообщение отправлено!");
-                                    }
-                                    catch (Exception ex)
-                                    {
-                                         await Tgbot.SendTextMessageAsync(message.Chat.Id, $"Ошибка: {ex.Message} Сообщение не отправлено!");
-                                    }
-                                    user.state = User.State.admin;
-                                    break;
-                                case User.State.mailing:
-                                    foreach (User user1 in users)
-                                    {
-                                         await Tgbot.SendTextMessageAsync(user1.Id, message.Text);
-                                    }
-                                    user.state = User.State.admin;
-                                    break;
-                                case User.State.add_coin:
-                                    db = new DB();
-                                    try
-                                    {
-                                        var x = message.Text.Split(':');
-                                        User user1 = users.FirstOrDefault(y => y.Id == int.Parse(x[0]));
-                                        if (user1 != null)
-                                        {
-                                            user1.AddMoney(int.Parse(x[1]));
-                                            db.Update(user1);
-                                        }
-
-                                        await db.SaveChangesAsync();
-                                    }
-                                    catch (Exception ex)
-                                    {
-                                         await Tgbot.SendTextMessageAsync(message.Chat.Id, $"Ошибка: {ex.Message}");
-                                    }
-                                    user.state = User.State.admin;
                                     break;
                             }
                             break;
                     }
                 }
-                if (user.state == User.State.change_table)
+                if (user == null || user.state != User.State.changeTable) return;
+                if (message.Type != MessageType.Photo)
                 {
-                    if (message.Type != MessageType.Photo)
-                    {
-                        await Tgbot.SendTextMessageAsync(message.Chat.Id, "Отправьте фотографию!");
-                        return;
-                    }
-                    user.state = User.State.main;
-                    await using (var ms = new MemoryStream())
-                    {
-                        await Tgbot.GetInfoAndDownloadFileAsync(message.Photo[message.Photo.Length - 1].FileId, ms);
-                        Image image = Image.FromStream(ms);
-                        var bmp = new Bitmap(image, 1590, 960);
-                        bmp.Save($"tables\\{user.Id}.jpg");
-                        bmp.Dispose();
-                        image.Dispose();
-                    }
-                    await Tgbot.SendTextMessageAsync(message.Chat.Id, "Успешно.");
+                    await Tgbot.SendTextMessageAsync(message.Chat.Id, "Отправьте фотографию!");
+                    return;
                 }
+                user.state = User.State.main;
+                await using (var ms = new MemoryStream())
+                {
+                    await Tgbot.GetInfoAndDownloadFileAsync(message.Photo[message.Photo.Length - 1].FileId, ms);
+                    Image image = Image.FromStream(ms);
+                    var bmp = new Bitmap(image, 1590, 960);
+                    bmp.Save($"tables\\{user.Id}.jpg");
+                    bmp.Dispose();
+                    image.Dispose();
+                }
+                await Tgbot.SendTextMessageAsync(message.Chat.Id, "Успешно.");
             }
             catch (Exception ex) { reviews.Enqueue($"{e.Message.Chat.Id}:Ошибка у пользователя {e.Message.Chat.Id}: {ex.Message}\nОбъект, вызвавший исключение: {ex.Source}\nМетод, вызвавший исключение: {ex.TargetSite}"); }
         }
@@ -778,7 +718,7 @@ namespace PokerBotCore
             try
             {
                 string information = message.Text.Split(' ')[1];
-                info = users.FirstOrDefault(x => x.Id == Int64.Parse(information.Substring(information.IndexOf('_') + 1)));
+                info = users.FirstOrDefault(x => x.Id == long.Parse(information.Substring(information.IndexOf('_') + 1)));
                 if (info == null) return;
                 if (info.Id == message.Chat.Id) return;
             }
@@ -786,8 +726,8 @@ namespace PokerBotCore
             var f = db.Friendships.Where(friendship => (friendship.User1 == user.Id && friendship.User2 == info.Id) || (friendship.User1 == info.Id && friendship.User2 == user.Id));
             if (f.Any()) return;
             db.UpdateRange(user, info);
-            Friendship frend = new Friendship() { User1 = user.Id, User2 = info.Id, Accepted = false };
-            await db.Friendships.AddAsync(frend);
+            Friendship friend = new Friendship() { User1 = user.Id, User2 = info.Id, Accepted = false };
+            await db.Friendships.AddAsync(friend);
             await db.SaveChangesAsync();
             await Tgbot.SendTextMessageAsync(user.Id, $"Пользователю отправлена заявка в друзья.");
             InlineKeyboardMarkup addfrendkey = new InlineKeyboardMarkup(new List<InlineKeyboardButton>() { InlineKeyboardButton.WithCallbackData("Добавить", $"Add_{user.Id}"), InlineKeyboardButton.WithCallbackData("Отклонить", $"Remove_{user.Id}") });
@@ -796,14 +736,16 @@ namespace PokerBotCore
 
         private static  async void SendMessageToChat(string message, string username, User user, IReplyMarkup markup)
         {
-            foreach (User user1 in chat.ToList())
+            foreach (User user1 in Chat.ToList())
             {
                 try
                 {
                     if (user1 == user) continue;
-                     await Tgbot.SendTextMessageAsync(user1.Id, $"@{username}: {message}", replyMarkup: markup);
+                    await Tgbot.SendTextMessageAsync(user1.Id, $"@{username}: {message}", replyMarkup: markup);
                 }
-                catch {
+                catch
+                {
+                    // ignored
                 }
             }
         }
