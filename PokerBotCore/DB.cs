@@ -3,19 +3,19 @@ using PokerBotCore.Entities;
 
 namespace PokerBotCore
 {
-    class DB : DbContext
+    internal sealed class Db : DbContext
     {
         public DbSet<User> Users { get; set; }
         public DbSet<Transaction> Transactions { get; set; }
         public DbSet<Friendship> Friendships { get; set; }
 
-        public DB()
+        public Db()
         {
             Database.EnsureCreated();
         }
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
-            optionsBuilder.UseSqlite("Filename=refull.sqlite");
+            optionsBuilder.UseSqlite("Filename=user.sqlite");
         }
     }
 }

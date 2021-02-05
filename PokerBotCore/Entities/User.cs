@@ -8,11 +8,10 @@ namespace PokerBotCore.Entities
 {
     public sealed class User
     {
-        private static readonly TelegramBotClient Tgbot = new TelegramBotClient("1341769299:AAE4q84mx-NRrSJndKsCVNVLr-SzjYeN7wk");
+        private static readonly TelegramBotClient Tgbot = new("1341769299:AAE4q84mx-NRrSJndKsCVNVLr-SzjYeN7wk");
         [Key, DatabaseGenerated(DatabaseGeneratedOption.None)]
         public long Id { get; set; }
         public string firstName;
-        //[ConcurrencyCheck]
         public int Money { get; set; }
         public int bet;
         public User Referal { get; set; }
@@ -39,13 +38,15 @@ namespace PokerBotCore.Entities
             mailing,
             addCoin,
             answer,
+            countFakeRoom,
+            idFakeRoom,
             changeTable,
             chat
         };
         public State state;
         public Room room;
         public List<string> cards;
-        private static readonly object Block = new object();
+        private static readonly object Block = new();
         public void AddMoney(int count)
         {
             if (Id == 0) return;

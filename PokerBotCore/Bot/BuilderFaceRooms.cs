@@ -7,20 +7,21 @@ namespace PokerBotCore.Bot
 {
     public static class BuilderFaceRooms
     {
-        private static Random Rnd = new Random();
+        private static Random Rnd = new();
         public static FakeRoom CreateFakeRoom(int count)
         {
-            User user = new User {Id = 0, Money = int.MaxValue, state = User.State.wait};
-            Room room = new FakeRoom(user, CreateNickname(), count);
+            User user = new User {Id = 0, Money = int.MaxValue, state = User.State.wait, firstName = CreateNickname()};
+            Room room = new FakeRoom(user, count);
             user.room = room;
-            return (FakeRoom)room;
+            return (FakeRoom) Operations.CreateRoom(count, user, false, true);
         }
-        static string a = "bcdfghjklmnpqrstvwxz";
-        static string b = "aeiouy";
-        static string emoji = "";
-        static List<string> c = new List<string>() { a, b };
-        static List<string> nameRus = new List<string> { "Александр", "Алексей", "Анатолий", "Андрей", "Антон", "Аркадий", "Арсений", "Артём", "Артур", "Борис", "Вадим", "Валентин", "Валерий", "Василий", "Виктор", "Виталий", "Владимир", "Владислав", "Вячеслав", "Глеб", "Даниил", "Денис", "Дмитрий", "Евгений", "Егор", "Иван", "Игорь", "Илья", "Кирилл", "Константин", "Максим", "Марк", "Матвей", "Михаил", "Никита", "Олег", "Павел", "Пётр", "Роман", "Руслан", "Сергей", "Степан", "Тимур", "Юрец", "Ярик" };
-        static List<string> nameEng = new List<string> { "Aleksandr", "Aleksey", "Anatoliy", "Andrey", "Anton", "Arkadiy", "Arseniy", "Artyom", "Artur", "Boris", "Vadim", "Valentin", "Valeriy", "Vasiliy", "Viktor", "Vitaliy", "Vladimir", "Vladislav", "Vyacheslav", "Gleb", "Daniil", "Denis", "Dmitriy", "Evgeniy", "Egor", "Ivan", "Igor", "Il'ya", "Kirill", "Konstantin", "Maksim", "Mark", "Matvey", "Mihail", "Nikita", "Oleg", "Pavel", "Pyotr", "Roma", "Ruslan", "Sergey", "Stepan", "Timur", "Yura", "Yarik" };
+
+        private const string A = "bcdfghjklmnpqrstvwxz";
+        private const string B = "aeiouy";
+        private const string Emoji = "";
+        static List<string> c = new() { A, B };
+        static readonly List<string> NameRus = new() { "Александр", "Алексей", "Анатолий", "Андрей", "Антон", "Аркадий", "Арсений", "Артём", "Артур", "Борис", "Вадим", "Валентин", "Валерий", "Василий", "Виктор", "Виталий", "Владимир", "Владислав", "Вячеслав", "Глеб", "Даниил", "Денис", "Дмитрий", "Евгений", "Егор", "Иван", "Игорь", "Илья", "Кирилл", "Константин", "Максим", "Марк", "Матвей", "Михаил", "Никита", "Олег", "Павел", "Пётр", "Роман", "Руслан", "Сергей", "Степан", "Тимур", "Юрец", "Ярик" };
+        static readonly List<string> NameEng = new() { "Aleksandr", "Aleksey", "Anatoliy", "Andrey", "Anton", "Arkadiy", "Arseniy", "Artyom", "Artur", "Boris", "Vadim", "Valentin", "Valeriy", "Vasiliy", "Viktor", "Vitaliy", "Vladimir", "Vladislav", "Vyacheslav", "Gleb", "Daniil", "Denis", "Dmitriy", "Evgeniy", "Egor", "Ivan", "Igor", "Il'ya", "Kirill", "Konstantin", "Maksim", "Mark", "Matvey", "Mihail", "Nikita", "Oleg", "Pavel", "Pyotr", "Roma", "Ruslan", "Sergey", "Stepan", "Timur", "Yura", "Yarik" };
 
         private static string CreateNickname()
         {
@@ -37,14 +38,14 @@ namespace PokerBotCore.Bot
                     }
                     break;
                 case 1:
-                    pass = nameRus[Rnd.Next(0, nameRus.Count)];
+                    pass = NameRus[Rnd.Next(0, NameRus.Count)];
                     break;
                 case 2:
-                    pass = nameEng[Rnd.Next(0, nameEng.Count)];
+                    pass = NameEng[Rnd.Next(0, NameEng.Count)];
                     break;
             }
-            pass += emoji;
-            if (Rnd.Next(0, 3) == 2) pass += emoji[Rnd.Next(0, emoji.Length)];
+            pass += Emoji;
+            //if (Rnd.Next(0, 3) == 2) pass += Emoji[Rnd.Next(0, Emoji.Length)];
             return pass;
         }
     }

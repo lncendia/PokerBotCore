@@ -20,13 +20,16 @@ namespace PokerBotCore.Rooms
             straightFlush,
             royalFlush
         };
+
         public readonly Comb combination;
+
         public Combination(sbyte nominal, Comb comb = Comb.nullCombination, sbyte nominal2 = 0)
         {
             combination = comb;
             this.nominal = nominal;
             this.nominal2 = nominal2;
         }
+
         public string ToString(User user)
         {
             switch (combination)
@@ -54,6 +57,7 @@ namespace PokerBotCore.Rooms
                 case Comb.royalFlush:
                     return "Роялфлеш";
             }
+
             return null;
         }
     }

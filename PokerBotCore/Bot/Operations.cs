@@ -10,7 +10,41 @@ namespace PokerBotCore.Bot
     {
         public static Room GetRoom(int id)
         {
-            return MainBot.rooms.ToList().FirstOrDefault(room => id == room.id);
+            return MainBot.Rooms.ToList().FirstOrDefault(room => id == room.id);
+        }
+        public static FakeRoom GetFaceRoom(int id)
+        {
+            return MainBot.FakeRooms.ToList().FirstOrDefault(room => id == room.id);
+        }
+
+        private static readonly object Obj = new();
+        public static Room CreateRoom(int count, User user, bool isPrivate, bool isFake = false)
+        {
+            lock (Obj)
+            {
+                Room room;
+                if (isFake)
+                {
+                    room = new FakeRoom(user, count);
+                    MainBot.Rooms.Add(room);
+                    return room;
+                }
+                if (isPrivate)
+                {
+                    room = new Room(user, count, true);
+                    user.room = room;
+                    user.state = User.State.wait;
+                }
+                else
+                {
+                    room = new Room(user, count, false);
+                    user.room = room;
+                    user.state = User.State.wait;
+                }
+
+                MainBot.Rooms.Add(room);
+                return room;
+            }
         }
         public static User GetUser(long id)
         {
@@ -36,11 +70,6 @@ namespace PokerBotCore.Bot
             {
                 Mute();
             }
-        }
-
-        public static async void SaveDb(User user)
-        {
-            
         }
     }
 }

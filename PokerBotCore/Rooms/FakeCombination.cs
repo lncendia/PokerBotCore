@@ -6,15 +6,22 @@ namespace PokerBotCore.Rooms
 {
     internal class FakeCombination
     {
-        readonly List<string> _nominal = new List<string>() { "Два", "Три", "Четыре", "Пять", "Шесть", "Семь", "Восемь", "Девять", "Десять", "Валет", "Дама", "Король", "Туз" };
-        readonly List<string> _deck = new List<string>() { "♣", "♠", "♥", "♦" };
+        readonly List<string> _nominal = new List<string>()
+        {
+            "Два", "Три", "Четыре", "Пять", "Шесть", "Семь", "Восемь", "Девять", "Десять", "Валет", "Дама", "Король",
+            "Туз"
+        };
+
+        readonly List<string> _deck = new List<string>() {"♣", "♠", "♥", "♦"};
         readonly List<string> _botcards = new List<string>();
         readonly List<string> _cards = new List<string>();
         private static readonly Random Rnd = new Random();
+
         public FakeCombination(Combination.Comb combination, int count)
         {
             DoCards(combination, count);
         }
+
         void DoCards(Combination.Comb combination, int count)
         {
             var nominalCopy = _nominal.ToList();
@@ -40,12 +47,14 @@ namespace PokerBotCore.Rooms
                         nominalCopy.Remove(card2);
                         _cards.Add($"{card2} {deckCopy[i % 4]}");
                     }
+
                     for (int i = 0; i < 4; i++)
                     {
                         card = nominalCopy[Rnd.Next(0, nominalCopy.Count)];
                         nominalCopy.Remove(card);
                         _cards.Add($"{card} {deck1}");
                     }
+
                     break;
                 case Combination.Comb.kare:
                     card = nominalCopy[Rnd.Next(0, nominalCopy.Count)];
@@ -69,6 +78,7 @@ namespace PokerBotCore.Rooms
                         nominalCopy.Remove(card2);
                         _cards.Add($"{card2} {_deck[i % 4]}");
                     }
+
                     _cards.Add(card + $" {deck2}");
                     _cards.Add(card + $" {deck1}");
                     break;
@@ -99,6 +109,7 @@ namespace PokerBotCore.Rooms
                         nominalCopy.Remove(card1);
                         _cards.Add($"{card1} {_deck[i % 4]}");
                     }
+
                     _cards.Add(card + $" {deck2}");
                     _cards.Add(card2 + $" {deck1}");
                     break;
@@ -121,10 +132,12 @@ namespace PokerBotCore.Rooms
                         nominalCopy.Remove(card2);
                         _cards.Add($"{card2} {_deck[i % 4]}");
                     }
+
                     _cards.Add(card + $" {deck1}");
                     break;
             }
         }
+
         public void GetCards(List<string> table, List<string> botCards)
         {
             table.Clear();

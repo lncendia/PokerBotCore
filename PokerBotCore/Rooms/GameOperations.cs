@@ -3,15 +3,14 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
 using System.Linq;
+using PokerBotCore.Bot;
 using PokerBotCore.Entities;
+using PokerBotCore.Keyboards;
 
 namespace PokerBotCore.Rooms
 {
     static class GameOperations
     {
-
-        private static readonly Random Rnd = new Random();
-
         public static void EmergencySaveMoney(List<User> players, Room room)
         {
             room.bet = 0;
@@ -33,7 +32,28 @@ namespace PokerBotCore.Rooms
             return (from str in nominal from strDeck in deck select $"{str} {strDeck}").ToList();
 
         }
+        public static void ExceptionInGame(Exception ex, Room room, bool isFinal = false)
+        {
+            MainBot.Reviews.Enqueue(
+                $"0:Эксепшн: {ex.Message}\nОбъект, вызвавший исключение: {ex.Source}\nМетод, вызвавший исключение: {ex.TargetSite}");
+            if (room.block && !isFinal) return;
+            room.block = true;
+            EmergencySaveMoney(room.players, room);
+            room.SendMessage($"Произошла ошибка. Приносим свои извинения, средства были возвращены!", room.players,
+                MainKeyboards.MainKeyboard, false);
+            foreach (User user in room.players.ToList())
+            {
+                room.UserLeave(user);
+            }
+        }
 
+        public static bool CheckOnePlayer(Room room)
+        {
+            if (!room.started) return false;
+            if (room.players.Count != 1 && room.players.Count - room.foldUsers.Count != 1) return false;
+            room.SetWinner();
+            return true;
+        }
         #region CheckCombination
 
         public static sbyte GetNominal(string card)
@@ -339,14 +359,14 @@ namespace PokerBotCore.Rooms
             {
                 images.Add(Image.FromFile($"cards\\{GetNameFile(str)}"));
             }
-
+            
             int x = 50;
             int y = (table.Width - 25) / 5;
             for (int i = 0; i < images.Count - 2; i++)
             {
                 g.DrawImage(images[i], x + y * i, 75);
             }
-
+            
             g.DrawImage(images[^2], 520, 545);
             g.DrawImage(images[^1], 820, 545);
             return table;
