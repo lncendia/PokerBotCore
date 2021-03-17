@@ -1,10 +1,12 @@
 ﻿using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
+using PokerBotCore.Bot.CallbackQueryCommands;
 using PokerBotCore.Bot.Commands;
 using PokerBotCore.Interfaces;
 using PokerBotCore.Model;
 using PokerBotCore.Rooms;
+using PokerBotCore.Rooms.RoomTypes;
 using Telegram.Bot;
 
 namespace PokerBotCore.Bot
@@ -16,7 +18,7 @@ namespace PokerBotCore.Bot
             if (_client != null) return _client;
             _client = new TelegramBotClient("1341769299:AAE4q84mx-NRrSJndKsCVNVLr-SzjYeN7wk");
             commands = InitialiseCommands();
-            callbackQueryCommands = new List<ICallbackQueryCommand>();
+            callbackQueryCommands = InitialiseCallbackQueryCommands();
             using Db db = new Db();
             users = db.Users.ToList();
             friendships = db.Friendships.ToList();
@@ -60,7 +62,35 @@ namespace PokerBotCore.Bot
                 new EnterIdFakeRoomToDeleteCommand(),
                 new EnterCountPlayersOfFakeRoomCommand(),
                 new EnterAnswerMessageCommand(),
-                new EnterCoinCountCommand(),
+                new EnterCoinCountCommand()
+            };
+        }
+        private static List<ICallbackQueryCommand> InitialiseCallbackQueryCommands()
+        {
+            return new()
+            {
+                new CallQuery(),
+               new CheckQuery(),
+               new FoldQuery(),
+               new RaiseQuery(),
+               new VABankQuery(),
+               new ChangeTableQuery(),
+               new CheckFriendsQuery(),
+               new CheckPaymentQuery(),
+               new ConnectToRoomQuery(),
+               new CreateFakeRoomQuery(),
+               new CreatePrivateRoomQuery(),
+               new CreatePublicRoomQuery(),
+               new ExitRoomQuery(),
+               new RemoveFakeRoomQuery(),
+               new SendRoomToChatQuery(),
+               new SentRequestsQuery(),
+               new SetStandardTableQuery(),
+               new AddFriendQuery(),
+               new BackAdminQuery(),
+               new AnswerAdminQuery()
+
+
             };
         }
         public static List<Room> rooms;

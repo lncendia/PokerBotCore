@@ -4,6 +4,7 @@ using PokerBotCore.Enums;
 using PokerBotCore.Interfaces;
 using PokerBotCore.Keyboards;
 using PokerBotCore.Rooms;
+using PokerBotCore.Rooms.RoomTypes;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 using User = PokerBotCore.Model.User;

@@ -1,31 +1,24 @@
 ﻿using System.Threading.Tasks;
+using PokerBotCore.Enums;
 using PokerBotCore.Interfaces;
+using PokerBotCore.Keyboards;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 using User = PokerBotCore.Model.User;
 
 namespace PokerBotCore.Bot.CallbackQueryCommands
 {
-    public class ExitRoomQuery : ICallbackQueryCommand
+    public class BackAdminQuery : ICallbackQueryCommand
     {
         public async Task Execute(TelegramBotClient client, User user, CallbackQuery query)
         {
             await client.DeleteMessageAsync(query.From.Id, query.Message.MessageId);
-            if (user.room != null)
-            {
-                while (user.room.block)
-                {
-                }
-
-                user.room.RemovePlayer(user);
-            }
-
-            await client.AnswerCallbackQueryAsync(query.Id, $"Вы покинули комнату.");
+            await client.SendTextMessageAsync(query.From.Id, "Вы в гланом меню.", replyMarkup:MainKeyboards.AdminKeyboard);
         }
 
         public bool Compare(CallbackQuery query, User user)
         {
-            return query.Data.Contains("exit") && user.room != null;
+            return user.state == State.admin;
         }
     }
 }

@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using PokerBotCore.Enums;
 using PokerBotCore.Model;
 using PokerBotCore.Rooms;
+using PokerBotCore.Rooms.RoomTypes;
 
 namespace PokerBotCore.Bot
 {

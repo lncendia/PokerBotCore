@@ -27,7 +27,7 @@ namespace PokerBotCore.Keyboards
                 });
         }
 
-        public static InlineKeyboardMarkup CombinationKeyboard(User user1, string combination)
+        public static InlineKeyboardMarkup CombinationKeyboard(User user1)
         {
             return new(new List<List<InlineKeyboardButton>>()
             {
@@ -36,7 +36,7 @@ namespace PokerBotCore.Keyboards
                     InlineKeyboardButton.WithCallbackData(user1.cards[0]),
                     InlineKeyboardButton.WithCallbackData(user1.cards[1])
                 },
-                new() {InlineKeyboardButton.WithCallbackData(combination)}
+                new() {InlineKeyboardButton.WithCallbackData(user1.combination.ToString())}
             });
         }
         public static readonly ReplyKeyboardMarkup Exit = new(new KeyboardButton("Выход"));

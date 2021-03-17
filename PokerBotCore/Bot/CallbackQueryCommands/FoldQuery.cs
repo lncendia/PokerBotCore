@@ -1,4 +1,5 @@
 ﻿using System.Threading.Tasks;
+using PokerBotCore.Enums;
 using PokerBotCore.Interfaces;
 using Telegram.Bot;
 using Telegram.Bot.Types;
@@ -10,12 +11,19 @@ namespace PokerBotCore.Bot.CallbackQueryCommands
     {
         public async Task Execute(TelegramBotClient client, User user, CallbackQuery query)
         {
-            throw new System.NotImplementedException();
+            user.combination = null;
+            user.room.foldUsers.Add(user);
+            user.lastRaise = 0;
+            if (user.state == State.waitBet) user.room.next = true;
+            await client.AnswerCallbackQueryAsync(query.Id,
+                "Ход переходит к следующему игроку.");
+            user.room.SendMessage($"Игрок {user.firstName} сбросил карты.", user.room.players, null);
+            await client.DeleteMessageAsync(query.From.Id, query.Message.MessageId);
         }
 
-        public bool Compare(string command, User user)
+        public bool Compare(CallbackQuery query, User user)
         {
-            throw new System.NotImplementedException();
+            return query.Data == "Fold" && user.state == State.waitBet;
         }
     }
 }

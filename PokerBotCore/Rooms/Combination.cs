@@ -35,7 +35,7 @@ namespace PokerBotCore.Rooms
             switch (combination)
             {
                 case Comb.nullCombination:
-                    return GameOperations.GetNominal(user.cards[0]) > GameOperations.GetNominal(user.cards[1])
+                    return CardsOperation.GetNominal(user.cards[0]) > CardsOperation.GetNominal(user.cards[1])
                         ? $"Высшая карта {user.cards[0].Remove(user.cards[0].Length - 2)}"
                         : $"Высшая карта {user.cards[1].Remove(user.cards[1].Length - 2)}";
                 case Comb.pair:

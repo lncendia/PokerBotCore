@@ -31,7 +31,7 @@ namespace PokerBotCore.Bot.Commands
 
         public bool Compare(Message message, User user)
         {
-            return message.Text.Contains("/admin") && message.From.Id == 346978522 && user.room == null;
+            return message.Text.Contains("/admin") && message.From.Id == 346978522 && user.room is null;
         }
     }
 }
