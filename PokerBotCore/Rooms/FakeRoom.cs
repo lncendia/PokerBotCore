@@ -5,8 +5,9 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using PokerBotCore.Bot;
-using PokerBotCore.Entities;
+using PokerBotCore.Enums;
 using PokerBotCore.Keyboards;
+using PokerBotCore.Model;
 using Telegram.Bot.Types.InputFiles;
 using Telegram.Bot.Types.ReplyMarkups;
 
@@ -15,7 +16,7 @@ namespace PokerBotCore.Rooms
     public class FakeRoom : Room
     {
         public bool needDelete = false;
-        readonly List<string> _botCards = new();
+        private readonly List<string> _botCards = new();
 
         private static readonly List<Combination.Comb> Combinations = new()
             {Combination.Comb.flush, Combination.Comb.kare, Combination.Comb.set, Combination.Comb.twoPair};
@@ -27,7 +28,7 @@ namespace PokerBotCore.Rooms
             x.GetCards(cards, _botCards);
         }
         public override void SendMessage(string message, IEnumerable<User> users, IReplyMarkup replyMarkup,
-            bool neadLeave = true)
+            bool needLeave = true)
         {
             foreach (var player in users.ToList().Where(player => player.Id != 0))
             {
@@ -37,7 +38,7 @@ namespace PokerBotCore.Rooms
                 }
                 catch
                 {
-                    if (neadLeave) UserLeave(player);
+                    if (needLeave) UserLeave(player);
                 }
             }
         }
@@ -67,7 +68,7 @@ namespace PokerBotCore.Rooms
             }
             catch (Exception ex)
             {
-                MainBot.Reviews.Enqueue(
+                BotSettings.reviews.Enqueue(
                     $"{user1.Id}:Эксепшн: {ex.Message}\nОбъект, вызвавший исключение: {ex.Source}\nМетод, вызвавший исключение: {ex.TargetSite}");
                 UserLeave(user1);
             }
@@ -79,7 +80,7 @@ namespace PokerBotCore.Rooms
             {
                 block = true; //Для того, чтоб человек не мог выйти.
                 players[0].cards = _botCards;
-                players[0].state = User.State.play;
+                players[0].state = State.play;
                 players[0].lastRaise = 0;
                 players[0].combination = null;
                 players[0].bet = 0;
@@ -87,7 +88,7 @@ namespace PokerBotCore.Rooms
                 for (int i = 1; i < players.Count; i++)
                 {
                     User user1 = players[i];
-                    user1.state = User.State.play;
+                    user1.state = State.play;
                     user1.lastRaise = 0;
                     user1.combination = null;
                     user1.bet = 0;
@@ -224,19 +225,30 @@ namespace PokerBotCore.Rooms
                 {
                     SendMessage($"Новая игра начнеться через 10 секунд.", players, null);
                     await Task.Delay(5000);
-                    block = true;
-                    var players1 = players.ToList();
-                    MainBot.Rooms[MainBot.Rooms.IndexOf(this)] = new Room(players1, countPlayers, id);
-                    started = false;
                     UserLeave(players[0]);
+                    if (players.Count > 0)
+                    {
+                        var players1 = players.ToList();
+                        if (players.Count > 0)
+                            BotSettings.rooms[BotSettings.rooms.IndexOf(this)] = new Room(players1, countPlayers, id);
+                    }
                     await Task.Delay(5000);
                 }
-                else UserLeave(players[0]);
+                else
+                {
+                    UserLeave(players[0]);
+                    if (players.Count > 0)
+                    {
+                        var players1 = players.ToList();
+                        if (players.Count > 0)
+                            BotSettings.rooms[BotSettings.rooms.IndexOf(this)] = new Room(players1, countPlayers, id);
+                    }
+                }
 
                 SendMessage($"Недостаточно игроков для начала игры. Ожидание...", players, null);
                 if (!needDelete)
                     
-                    MainBot.FakeRooms[MainBot.FakeRooms.IndexOf(this)] = BuilderFaceRooms.CreateFakeRoom(countPlayers);
+                    BotSettings.fakeRooms[BotSettings.fakeRooms.IndexOf(this)] = BuilderFakeRooms.CreateFakeRoom(countPlayers);
                 
             }
             catch

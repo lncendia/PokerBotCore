@@ -1,5 +1,7 @@
 ﻿using System;
 using PokerBotCore.Bot;
+using PokerBotCore.Rooms;
+using Telegram.Bot.Types;
 
 namespace PokerBotCore
 {

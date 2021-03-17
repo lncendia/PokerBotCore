@@ -5,8 +5,9 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using PokerBotCore.Bot;
-using PokerBotCore.Entities;
+using PokerBotCore.Enums;
 using PokerBotCore.Keyboards;
+using PokerBotCore.Model;
 using Telegram.Bot;
 using Telegram.Bot.Types.InputFiles;
 using Telegram.Bot.Types.ReplyMarkups;
@@ -15,37 +16,36 @@ namespace PokerBotCore.Rooms
 {
     public class Room
     {
-        protected static readonly TelegramBotClient TgBot =
-            new("1341769299:AAE4q84mx-NRrSJndKsCVNVLr-SzjYeN7wk");
+        protected static readonly TelegramBotClient TgBot = BotSettings.Get();
 
         protected List<string> cards = GameOperations.CreateCards();
-        //protected List<string> cards = new List<string>()
-        //{"Король ♠", "Восемь ♥", "Король ♦", "Восемь ♣", "Девять ♠", "Два ♥", "Шесть ♦", "Пять ♣", "Четыре ♦"};//, "Два ♣", "Три ♥", "Пять ♣", "Восемь ♥" };
+        // protected List<string> cards = new List<string>()
+        // {"Король ♠", "Король ♥", "Король ♦", "Восемь ♣", "Король ♣", "Восемь ♥", "Шесть ♦", "Пять ♣", "Восемь ♦", "Два ♣", "Три ♥", "Пять ♣", "Туз ♥" };
         public readonly List<string> openedCards = new();
         protected static readonly Random Rnd = new();
         public List<User> players;
         public readonly List<User> foldUsers = new();
         public readonly List<User> allInUsers = new();
-        readonly List<int> _leavedPlayers = new();
+        public readonly List<int> leavedPlayers = new();
         public int bet;
         public readonly int countPlayers;
         public readonly int id;
         public readonly int key;
         public bool block;
-        public bool started=false;
+        public bool started;
         public bool next;
 
         public Room(User user, int count, bool isProtected)
         {
-            for (int i = 0; i <= MainBot.Rooms.Count; i++)
+            for (int i = 0; i <= BotSettings.rooms.Count; i++)
             {
-                if (i == MainBot.Rooms.Count)
+                if (i == BotSettings.rooms.Count)
                 {
                     id = i;
                     break;
                 }
 
-                if (i == MainBot.Rooms[i].id) continue;
+                if (i == BotSettings.rooms[i].id) continue;
                 id = i;
                 break;
             }
@@ -72,7 +72,7 @@ namespace PokerBotCore.Rooms
             foreach (User user in users)
             {
                 user.room = this;
-                user.state = User.State.wait;
+                user.state = State.wait;
             }
 
             players = users;
@@ -93,7 +93,7 @@ namespace PokerBotCore.Rooms
                     return;
                 }
                 user.room = this;
-                user.state = User.State.wait;
+                user.state = State.wait;
                 try
                 {
                     TgBot.SendTextMessageAsync(user.Id,
@@ -127,13 +127,14 @@ namespace PokerBotCore.Rooms
                 user.combination = null;
                 user.lastRaise = 0;
                 user.cards = null;
-                _leavedPlayers.Add(user.bet);
+                leavedPlayers.Add(user.bet);
                 SendMessage($"{user.firstName} отключился(лась). [{players.Count}/{countPlayers}].", players, null);
-                if ( user.state == User.State.waitBet||players.Count - foldUsers.Count - allInUsers.Count == 1) next = true;
-                user.state = User.State.main;
+                if (user.state == State.waitBet || players.Count - foldUsers.Count - allInUsers.Count == 1)
+                    next = true;
+                user.state = State.main;
                 user.room = null;
                 if (players.Count == 0)
-                    MainBot.Rooms.Remove(this);
+                    BotSettings.rooms.Remove(this);
                 try
                 {
                     TgBot.SendTextMessageAsync(user.Id, $"Вы покинули комнату {id}.",
@@ -147,9 +148,8 @@ namespace PokerBotCore.Rooms
         }
 
         public virtual void SendMessage(string message, IEnumerable<User> users, IReplyMarkup replyMarkup,
-            bool neadLeave = true)
+            bool needLeave = true)
         {
-            //if (block && !final1) return;
             foreach (var player in users.ToList())
             {
                 try
@@ -158,7 +158,7 @@ namespace PokerBotCore.Rooms
                 }
                 catch
                 {
-                    if (neadLeave) UserLeave(player);
+                    if (needLeave) UserLeave(player);
                 }
             }
         }
@@ -170,7 +170,7 @@ namespace PokerBotCore.Rooms
                 block = true; //Для того, чтоб человек не мог выйти.
                 foreach (User user1 in players.ToList())
                 {
-                    user1.state = User.State.play;
+                    user1.state = State.play;
                     user1.lastRaise = 0;
                     user1.combination = null;
                     user1.bet = 0;
@@ -187,7 +187,6 @@ namespace PokerBotCore.Rooms
                         GameKeyboards.CombinationKeyboard(user1, combination));
 
                 }
-
                 players[0].lastRaise = 10;
                 players[0].Money -= 10;
                 bet += 10;
@@ -276,7 +275,7 @@ namespace PokerBotCore.Rooms
                     SendMessage("Ваш ход. У вас есть 60 секунд.", new List<User>() {player}, GameKeyboards.DoKeyboardCall(lastRaise - player.lastRaise));
                 }
 
-                player.state = User.State.waitBet;
+                player.state = State.waitBet;
                 int j = 0;
                 do
                 {
@@ -293,7 +292,7 @@ namespace PokerBotCore.Rooms
                     return false;
                 }
 
-                player.state = User.State.play;
+                player.state = State.play;
                 return true;
             }
             catch (Exception ex)
@@ -306,14 +305,7 @@ namespace PokerBotCore.Rooms
         {
             try
             {
-                // if (!endgame)
-                    // if ((players.Count == 1 || players.Count - foldUsers.Count == 1))
-                    // {
-                    //     endgame = true;
-                    //     SetWinner();
-                    //     return;
-                    // }
-                    if (openedCards.Count == 5)
+                if (openedCards.Count == 5)
                 {
                     SetWinner();
                 }
@@ -392,13 +384,13 @@ namespace PokerBotCore.Rooms
             }
             catch (Exception ex)
             {
-                MainBot.Reviews.Enqueue(
+                BotSettings.reviews.Enqueue(
                     $"{user1.Id}:Эксепшн: {ex.Message}\nОбъект, вызвавший исключение: {ex.Source}\nМетод, вызвавший исключение: {ex.TargetSite}");
                 UserLeave(user1);
             }
         }
 
-        public async void SetWinner()
+        private async void SetWinner()
         {
             try
             {
@@ -430,14 +422,14 @@ namespace PokerBotCore.Rooms
                 {
                     string winnersFirstName =
                         winners.Aggregate("", (current, user) => current + (user.firstName + ", "));
-                    Payment(winners, playersNotLeave);
+                    GameOperations.Payment(winners, playersNotLeave,this);
                     SendMessage(
                         $"Игра окончена: {winnersFirstName.Remove(winnersFirstName.Length - 2)} разделили выигрыш между собой с комбинацией {winners[0].combination.ToString(winners[0])}",
                         players, null);
                 }
                 else if (players.Count > 0)
                 {
-                    Payment(winners, playersNotLeave);
+                    GameOperations.Payment(winners, playersNotLeave,this);
                     SendMessage(
                         $"Игра окончена: Победил {winners[0].firstName} с комбинацией {winners[0].combination.ToString(winners[0])}",
                         players, null);
@@ -451,81 +443,6 @@ namespace PokerBotCore.Rooms
             }
         }
 
-        protected void Payment(List<User> winners, List<User> playersNotLeave)
-        {
-            try
-            {
-                using Db db = new Db();
-                if (allInUsers.Count != 0)
-                {
-                    var playersnotfold = playersNotLeave.ToList();
-                    foreach (User user in foldUsers) playersnotfold.Remove(user);
-                    var playSidePod = playersnotfold.ToList();
-                    int j = 0;
-                    while (bet > 0)
-                    {
-                        int mainbank = 0, min = playSidePod[0].bet;
-                        min = playSidePod.Select(user => user.bet).Prepend(min).Min();
-                        foreach (User user in playersNotLeave)
-                        {
-                            if (user.bet < min)
-                            {
-                                mainbank += user.bet;
-                                user.bet = 0;
-                            }
-                            else
-                            {
-                                mainbank += min;
-                                user.bet -= min;
-                            }
-
-                            if (user.bet == 0) playSidePod.Remove(user);
-                        }
-
-                        for (int i = 0; i < _leavedPlayers.Count; i++)
-                        {
-                            if (_leavedPlayers[i] < min)
-                            {
-                                mainbank += _leavedPlayers[0];
-                                _leavedPlayers[0] = 0;
-                            }
-                            else
-                            {
-                                mainbank += min;
-                                _leavedPlayers[i] -= min;
-                            }
-                        }
-
-                        bet -= mainbank;
-                        int win = mainbank / winners.Count;
-                        if (j > 0) SendMessage($"Вы забираете побочный банк №{j}.", winners, null);
-                        foreach (var user in winners.Where(_ => playSidePod.Count != playersNotLeave.Count))
-                        {
-                            user.AddMoney(win);
-                        }
-
-                        j++;
-                        winners = GameOperations.MaxCombination(playSidePod);
-                    }
-                }
-                else
-                {
-                    int win = bet / winners.Count;
-                    foreach (User user in winners)
-                    {
-                        user.AddMoney(win);
-                    }
-                }
-
-                db.UpdateRange(playersNotLeave);
-                db.SaveChanges();
-            }
-            catch
-            {
-                // ignored
-            }
-        }
-
         protected virtual async Task CreateNewRoom(List<User> playersNotLeave)
         {
             try
@@ -533,7 +450,7 @@ namespace PokerBotCore.Rooms
                 started = false;
                 foreach (User user in playersNotLeave)
                 {
-                    user.state = User.State.wait;
+                    user.state = State.wait;
                     if (user.Money >= 100 || user.Id == 0) continue;
                     try
                     {

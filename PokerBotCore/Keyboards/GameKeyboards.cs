@@ -1,5 +1,5 @@
 ﻿using System.Collections.Generic;
-using PokerBotCore.Entities;
+using PokerBotCore.Model;
 using Telegram.Bot.Types.ReplyMarkups;
 
 namespace PokerBotCore.Keyboards

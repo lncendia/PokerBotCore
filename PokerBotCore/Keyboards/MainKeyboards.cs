@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using PokerBotCore.Entities;
+using PokerBotCore.Bot;
 using PokerBotCore.Rooms;
 using Telegram.Bot.Types.ReplyMarkups;
 
@@ -23,10 +23,11 @@ namespace PokerBotCore.Keyboards
                 new() {new KeyboardButton("Рассылка"), new KeyboardButton("Комнаты с ботами")},
                 new()
                     {new KeyboardButton("Добавить средства"), new KeyboardButton("Просмотр отзывов")},
-                new() {new KeyboardButton("Фейк комнаты")},
                 new() {new KeyboardButton("/admin")}
             });
 
+        public static readonly InlineKeyboardMarkup BackAdmin = new(
+            InlineKeyboardButton.WithCallbackData("В главное меню", "backAdmin"));
         public static readonly InlineKeyboardMarkup CreateOrRemoveFaceRoom = new(new List<InlineKeyboardButton>
         {
             InlineKeyboardButton.WithCallbackData("Добавить", "createFakeRoom"),
@@ -82,8 +83,9 @@ namespace PokerBotCore.Keyboards
                     : $"Комната {room.id} [{room.players.Count}/{room.countPlayers}]", room.id.ToString());
         }
 
-        public static InlineKeyboardMarkup CreateConnectButton(List<Room> rooms)
+        public static InlineKeyboardMarkup CreateConnectButton()
         {
+            List<Room> rooms = BotSettings.rooms;
             var key = new List<List<InlineKeyboardButton>>();
             foreach (var room in rooms.TakeWhile(_ => key.Count != 50).Where(room =>
                 room.players.Count != 0 && !room.started))

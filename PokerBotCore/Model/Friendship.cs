@@ -1,6 +1,6 @@
-﻿namespace PokerBotCore.Entities
+﻿namespace PokerBotCore.Model
 {
-    class Friendship
+    public class Friendship
     {
         public int Id { get; set; }
         public long User1 { get; set; }

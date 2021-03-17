@@ -4,8 +4,9 @@ using System.Drawing;
 using System.IO;
 using System.Linq;
 using PokerBotCore.Bot;
-using PokerBotCore.Entities;
+using PokerBotCore.Enums;
 using PokerBotCore.Keyboards;
+using PokerBotCore.Model;
 
 namespace PokerBotCore.Rooms
 {
@@ -16,14 +17,14 @@ namespace PokerBotCore.Rooms
             room.bet = 0;
             foreach (User user in players.ToList())
             {
-                user.state = User.State.main;
+                user.state = State.main;
                 user.Money += user.bet;
             }
         }
 
         public static List<string> CreateCards()
         {
-            List<string> nominal = new List<string>()
+            List<string> nominal = new List<string>
             {
                 "Два", "Три", "Четыре", "Пять", "Шесть", "Семь", "Восемь", "Девять", "Десять", "Валет", "Дама",
                 "Король", "Туз"
@@ -34,7 +35,7 @@ namespace PokerBotCore.Rooms
         }
         public static void ExceptionInGame(Exception ex, Room room, bool isFinal = false)
         {
-            MainBot.Reviews.Enqueue(
+            BotSettings.reviews.Enqueue(
                 $"0:Эксепшн: {ex.Message}\nОбъект, вызвавший исключение: {ex.Source}\nМетод, вызвавший исключение: {ex.TargetSite}");
             if (room.block && !isFinal) return;
             room.block = true;
@@ -46,36 +47,27 @@ namespace PokerBotCore.Rooms
                 room.UserLeave(user);
             }
         }
-
-        public static bool CheckOnePlayer(Room room)
-        {
-            if (!room.started) return false;
-            if (room.players.Count != 1 && room.players.Count - room.foldUsers.Count != 1) return false;
-            room.SetWinner();
-            return true;
-        }
         #region CheckCombination
 
         public static sbyte GetNominal(string card)
         {
-            switch (card.Remove(card.Length - 2))
+            return card.Remove(card.Length - 2) switch
             {
-                case "Два": return 2;
-                case "Три": return 3;
-                case "Четыре": return 4;
-                case "Пять": return 5;
-                case "Шесть": return 6;
-                case "Семь": return 7;
-                case "Восемь": return 8;
-                case "Девять": return 9;
-                case "Десять": return 10;
-                case "Валет": return 11;
-                case "Дама": return 12;
-                case "Король": return 13;
-                case "Туз": return 14;
-            }
-
-            return 0;
+                "Два" => 2,
+                "Три" => 3,
+                "Четыре" => 4,
+                "Пять" => 5,
+                "Шесть" => 6,
+                "Семь" => 7,
+                "Восемь" => 8,
+                "Девять" => 9,
+                "Десять" => 10,
+                "Валет" => 11,
+                "Дама" => 12,
+                "Король" => 13,
+                "Туз" => 14,
+                _ => 0
+            };
         }
 
         private static void Sort(List<char> cd, List<sbyte> keys)
@@ -163,7 +155,7 @@ namespace PokerBotCore.Rooms
             return false;
         }
 
-        static bool CheckFullHouse(List<sbyte> nominal, User user, ref string name)
+        private static bool CheckFullHouse(List<sbyte> nominal, User user, ref string name)
         {
             var sets = new List<sbyte>();
             for (int i = 0; i < nominal.Count - 2; i++)
@@ -283,16 +275,20 @@ namespace PokerBotCore.Rooms
                 if (same == 2) nominals.Add(nominal[i]);
             }
 
-            if (nominals.Count <= 0) return false;
-            if (nominals.Count > 1)
+            switch (nominals.Count)
             {
-                var x1 = nominals.Max();
-                nominals.Remove(nominals.Max());
-                var x2 = nominals.Max();
-                cards = new List<sbyte>() {x1, x2};
-                user.combination = new Combination(x1, Combination.Comb.twoPair, x2);
-                name = "Две пары";
-                return true;
+                case <= 0:
+                    return false;
+                case > 1:
+                {
+                    var x1 = nominals.Max();
+                    nominals.Remove(nominals.Max());
+                    var x2 = nominals.Max();
+                    cards = new List<sbyte>() {x1, x2};
+                    user.combination = new Combination(x1, Combination.Comb.twoPair, x2);
+                    name = "Две пары";
+                    return true;
+                }
             }
 
             if (nominals.Count != 1) return false;
@@ -469,7 +465,7 @@ namespace PokerBotCore.Rooms
                 winners[0].combination.combination != Combination.Comb.nullCombination) return winners;
             {
                 string name = "";
-                var cardsNothand = new List<sbyte>();
+                var cardsNotHand = new List<sbyte>();
                 foreach (User user in winners)
                 {
                     var openedCards = user.room.openedCards.ToList();
@@ -486,54 +482,40 @@ namespace PokerBotCore.Rooms
                     switch (combination)
                     {
                         case Combination.Comb.set:
-                            CheckSet(nominal, user, ref name, ref cardsNothand);
+                            CheckSet(nominal, user, ref name, ref cardsNotHand);
                             break;
                         case Combination.Comb.kare:
-                            CheckKare(nominal, user, ref name, ref cardsNothand);
+                            CheckKare(nominal, user, ref name, ref cardsNotHand);
                             break;
                         case Combination.Comb.nullCombination:
                             break;
                         default:
-                            CheckPair(nominal, user, ref name, ref cardsNothand);
+                            CheckPair(nominal, user, ref name, ref cardsNotHand);
                             break;
                     }
 
                     cards.AddRange(from x in openedCards
-                        where !cardsNothand.Contains(GetNominal(x))
+                        where !cardsNotHand.Contains(GetNominal(x))
                         select GetNominal(x));
                 }
 
                 cards = cards.Distinct().ToList();
+                cards.Sort();
+                cards.Reverse();
                 List<sbyte> kickers = new List<sbyte>();
                 switch (combination)
                 {
                     case Combination.Comb.nullCombination:
-                        kickers.Add(cards.Max());
-                        cards.Remove(kickers[0]);
-                        kickers.Add(cards.Max());
-                        cards.Remove(kickers[1]);
-                        kickers.Add(cards.Max());
-                        cards.Remove(kickers[2]);
-                        kickers.Add(cards.Max());
-                        cards.Remove(kickers[3]);
-                        kickers.Add(cards.Max());
+                        kickers.AddRange(cards.GetRange(0,5));
                         break;
                     case Combination.Comb.pair:
-                        kickers.Add(cards.Max());
-                        cards.Remove(kickers[0]);
-                        kickers.Add(cards.Max());
-                        cards.Remove(kickers[1]);
-                        kickers.Add(cards.Max());
-                        cards.Remove(kickers[2]);
+                        kickers.AddRange(cards.GetRange(0,3));
                         break;
                     case Combination.Comb.set:
-                        kickers.Add(cards.Max());
-                        cards.Remove(kickers[0]);
-                        kickers.Add(cards.Max());
-                        cards.Remove(kickers[1]);
+                        kickers.AddRange(cards.GetRange(0,2));
                         break;
                     default:
-                        kickers.Add(cards.Max());
+                        kickers.Add(cards[0]);
                         break;
                 }
 
@@ -550,6 +532,80 @@ namespace PokerBotCore.Rooms
                 if (users.Count != 0) return users;
             }
             return winners;
+        }
+        public static void Payment(List<User> winners, List<User> playersNotLeave, Room room)
+        {
+            try
+            {
+                using Db db = new Db();
+                if (room.allInUsers.Count != 0)
+                {
+                    var notFold = playersNotLeave.ToList();
+                    foreach (User user in room.foldUsers) notFold.Remove(user);
+                    var playSidePod = notFold.ToList();
+                    int j = 0;
+                    while (room.bet > 0)
+                    {
+                        int mainBank = 0, min = playSidePod[0].bet;
+                        min = playSidePod.Select(user => user.bet).Prepend(min).Min();
+                        foreach (User user in playersNotLeave)
+                        {
+                            if (user.bet < min)
+                            {
+                                mainBank += user.bet;
+                                user.bet = 0;
+                            }
+                            else
+                            {
+                                mainBank += min;
+                                user.bet -= min;
+                            }
+
+                            if (user.bet == 0) playSidePod.Remove(user);
+                        }
+                        
+                        for (int i = 0; i < room.leavedPlayers.Count; i++)
+                        {
+                            if (room.leavedPlayers[i] < min)
+                            {
+                                mainBank += room.leavedPlayers[0];
+                                room.leavedPlayers[0] = 0;
+                            }
+                            else
+                            {
+                                mainBank += min;
+                                room.leavedPlayers[i] -= min;
+                            }
+                        }
+
+                        room.bet -= mainBank;
+                        int win = mainBank / winners.Count;
+                        if (j > 0) room.SendMessage($"Вы забираете побочный банк №{j}.", winners, null);
+                        foreach (var user in winners.Where(_ => playSidePod.Count != playersNotLeave.Count))
+                        {
+                            user.AddMoney(win);
+                        }
+
+                        j++;
+                        winners = MaxCombination(playSidePod);
+                    }
+                }
+                else
+                {
+                    int win = room.bet / winners.Count;
+                    foreach (User user in winners)
+                    {
+                        user.AddMoney(win);
+                    }
+                }
+
+                db.UpdateRange(playersNotLeave);
+                db.SaveChanges();
+            }
+            catch
+            {
+                // ignored
+            }
         }
     }
 }

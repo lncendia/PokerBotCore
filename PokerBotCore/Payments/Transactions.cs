@@ -1,6 +1,6 @@
 ﻿using System;
 using Newtonsoft.Json.Linq;
-using PokerBotCore.Entities;
+using PokerBotCore.Model;
 using Qiwi.BillPayments.Client;
 using Qiwi.BillPayments.Model;
 using Qiwi.BillPayments.Model.In;
@@ -66,6 +66,7 @@ namespace PokerBotCore.Payments
 
         public static bool OutputTransaction(string number, User user)
         {
+            return false;
             try
             {
                 using Db db = new Db();

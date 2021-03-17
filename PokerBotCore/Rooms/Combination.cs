@@ -1,4 +1,4 @@
-﻿using PokerBotCore.Entities;
+﻿using PokerBotCore.Model;
 
 namespace PokerBotCore.Rooms
 {

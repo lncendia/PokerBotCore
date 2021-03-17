@@ -1,10 +1,11 @@
 ﻿using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using PokerBotCore.Enums;
 using PokerBotCore.Rooms;
 using Telegram.Bot;
 
-namespace PokerBotCore.Entities
+namespace PokerBotCore.Model
 {
     public sealed class User
     {
@@ -21,28 +22,6 @@ namespace PokerBotCore.Entities
         public int output;
         public int idPrivateRoom;
         public int idForAnswer;
-
-        public enum State
-        {
-            main,
-            waitCount,
-            wait,
-            play,
-            waitBet,
-            waitMoney,
-            output,
-            outputWaitNumber,
-            codPrivate,
-            feedback,
-            admin,
-            mailing,
-            addCoin,
-            answer,
-            countFakeRoom,
-            idFakeRoom,
-            changeTable,
-            chat
-        };
         public State state;
         public Room room;
         public List<string> cards;

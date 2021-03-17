@@ -1,7 +1,8 @@
 ﻿using System;
 using System.Linq;
 using System.Threading.Tasks;
-using PokerBotCore.Entities;
+using PokerBotCore.Enums;
+using PokerBotCore.Model;
 using PokerBotCore.Rooms;
 
 namespace PokerBotCore.Bot
@@ -10,11 +11,11 @@ namespace PokerBotCore.Bot
     {
         public static Room GetRoom(int id)
         {
-            return MainBot.Rooms.ToList().FirstOrDefault(room => id == room.id);
+            return BotSettings.rooms.ToList().FirstOrDefault(room => id == room.id);
         }
         public static FakeRoom GetFaceRoom(int id)
         {
-            return MainBot.FakeRooms.ToList().FirstOrDefault(room => id == room.id);
+            return BotSettings.fakeRooms.ToList().FirstOrDefault(room => id == room.id);
         }
 
         private static readonly object Obj = new();
@@ -26,29 +27,29 @@ namespace PokerBotCore.Bot
                 if (isFake)
                 {
                     room = new FakeRoom(user, count);
-                    MainBot.Rooms.Add(room);
+                    BotSettings.rooms.Add(room);
                     return room;
                 }
                 if (isPrivate)
                 {
                     room = new Room(user, count, true);
                     user.room = room;
-                    user.state = User.State.wait;
+                    user.state = State.wait;
                 }
                 else
                 {
                     room = new Room(user, count, false);
                     user.room = room;
-                    user.state = User.State.wait;
+                    user.state = State.wait;
                 }
 
-                MainBot.Rooms.Add(room);
+                BotSettings.rooms.Add(room);
                 return room;
             }
         }
         public static User GetUser(long id)
         {
-            return MainBot.users.ToList().FirstOrDefault(user => id == user.Id);
+            return BotSettings.users.ToList().FirstOrDefault(user => id == user.Id);
         }
         public static DateTime time;
         public static async void Mute()
@@ -59,7 +60,7 @@ namespace PokerBotCore.Bot
                 {
                     time = DateTime.Now.AddMinutes(3);
                     await Task.Delay(180000);
-                    foreach (User user in MainBot.users)
+                    foreach (User user in BotSettings.users)
                     {
                         user.countMessages = 0;
                     }
